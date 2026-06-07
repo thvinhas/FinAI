@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createTransaction, createTransfer } from "@/actions/transactions";
+import Input from "@/components/Input";
+import SearchSelect from "@/components/SearchSelect";
 import CurrencyInput from "@/components/CurrencyInput";
 import type { Category, Account } from "@/types/database";
 
@@ -74,107 +76,113 @@ export default function TransactionForm({
       {type === "transferencia" ? (
         <>
           <div>
-            <label className="mb-1 block text-sm text-zinc-400">
+            <label className="mb-1.5 block text-sm font-medium text-zinc-400">
               Conta de Origem
             </label>
-            <select
+            <SearchSelect
               name="from_account_id"
               required
-              className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-2 text-white outline-none focus:border-indigo-500"
-            >
-              <option value="">Selecione</option>
-              {accounts.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.name} (R$ {Number(a.balance).toFixed(2)})
-                </option>
-              ))}
-            </select>
+              placeholder="Selecione"
+              searchPlaceholder="Buscar conta..."
+              options={[
+                { value: "", label: "Selecione" },
+                ...accounts.map((a) => ({
+                  value: a.id,
+                  label: `${a.name} (R$ ${Number(a.balance).toFixed(2)})`,
+                  color: a.color,
+                })),
+              ]}
+            />
           </div>
           <div>
-            <label className="mb-1 block text-sm text-zinc-400">
+            <label className="mb-1.5 block text-sm font-medium text-zinc-400">
               Conta de Destino
             </label>
-            <select
+            <SearchSelect
               name="to_account_id"
               required
-              className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-2 text-white outline-none focus:border-indigo-500"
-            >
-              <option value="">Selecione</option>
-              {accounts.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.name}
-                </option>
-              ))}
-            </select>
+              placeholder="Selecione"
+              searchPlaceholder="Buscar conta..."
+              options={[
+                { value: "", label: "Selecione" },
+                ...accounts.map((a) => ({
+                  value: a.id,
+                  label: a.name,
+                  color: a.color,
+                })),
+              ]}
+            />
           </div>
           <div>
-            <label className="mb-1 block text-sm text-zinc-400">Valor</label>
+            <label className="mb-1.5 block text-sm font-medium text-zinc-400">Valor</label>
             <CurrencyInput name="amount" required placeholder="0,00" />
           </div>
           <div>
-            <label className="mb-1 block text-sm text-zinc-400">Data</label>
-            <input
+            <label className="mb-1.5 block text-sm font-medium text-zinc-400">Data</label>
+            <Input
               name="date"
               type="date"
               defaultValue={new Date().toISOString().split("T")[0]}
-              className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-2 text-white outline-none focus:border-indigo-500"
             />
           </div>
         </>
       ) : (
         <>
           <div>
-            <label className="mb-1 block text-sm text-zinc-400">Valor</label>
+            <label className="mb-1.5 block text-sm font-medium text-zinc-400">Valor</label>
             <CurrencyInput name="amount" required placeholder="0,00" />
           </div>
           <div>
-            <label className="mb-1 block text-sm text-zinc-400">
+            <label className="mb-1.5 block text-sm font-medium text-zinc-400">
               Descrição
             </label>
-            <input
+            <Input
               name="description"
               required
               placeholder="Ex: Salário, Supermercado..."
-              className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-2 text-white outline-none focus:border-indigo-500"
             />
           </div>
           <div>
-            <label className="mb-1 block text-sm text-zinc-400">Conta</label>
-            <select
+            <label className="mb-1.5 block text-sm font-medium text-zinc-400">Conta</label>
+            <SearchSelect
               name="account_id"
-              className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-2 text-white outline-none focus:border-indigo-500"
-            >
-              <option value="">Selecione uma conta</option>
-              {accounts.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.name} (R$ {Number(a.balance).toFixed(2)})
-                </option>
-              ))}
-            </select>
+              placeholder="Selecione uma conta"
+              searchPlaceholder="Buscar conta..."
+              options={[
+                { value: "", label: "Selecione uma conta" },
+                ...accounts.map((a) => ({
+                  value: a.id,
+                  label: `${a.name} (R$ ${Number(a.balance).toFixed(2)})`,
+                  color: a.color,
+                })),
+              ]}
+            />
           </div>
           <div>
-            <label className="mb-1 block text-sm text-zinc-400">
+            <label className="mb-1.5 block text-sm font-medium text-zinc-400">
               Categoria
             </label>
-            <select
+            <SearchSelect
+              key={type}
               name="category_id"
-              className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-2 text-white outline-none focus:border-indigo-500"
-            >
-              <option value="">Sem categoria</option>
-              {filteredCategories.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
+              placeholder="Sem categoria"
+              searchPlaceholder="Buscar categoria..."
+              options={[
+                { value: "", label: "Sem categoria" },
+                ...filteredCategories.map((c) => ({
+                  value: c.id,
+                  label: c.name,
+                  color: c.color,
+                })),
+              ]}
+            />
           </div>
           <div>
-            <label className="mb-1 block text-sm text-zinc-400">Data</label>
-            <input
+            <label className="mb-1.5 block text-sm font-medium text-zinc-400">Data</label>
+            <Input
               name="date"
               type="date"
               defaultValue={new Date().toISOString().split("T")[0]}
-              className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-2 text-white outline-none focus:border-indigo-500"
             />
           </div>
         </>

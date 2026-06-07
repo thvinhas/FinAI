@@ -29,7 +29,13 @@ export default function AccountList({
   if (accounts.length === 0) {
     return (
       <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-12 text-center">
-        <p className="text-zinc-500">Nenhuma conta cadastrada.</p>
+        <p className="mb-4 text-zinc-500">Nenhuma conta cadastrada.</p>
+        <a
+          href="/accounts/new"
+          className="inline-block rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-indigo-700"
+        >
+          Criar primeira conta
+        </a>
       </div>
     );
   }

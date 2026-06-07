@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createCategory, archiveCategory } from "@/actions/categories";
 import { Archive } from "lucide-react";
+import Input from "@/components/Input";
 import type { Category } from "@/types/database";
 
 const COLORS = [
@@ -72,11 +73,10 @@ export default function CategoryManager({
             </button>
           </div>
           <div className="flex flex-col gap-3">
-            <input
+            <Input
               name="name"
               required
               placeholder="Nome da categoria"
-              className="rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-2 text-white outline-none focus:border-indigo-500"
             />
             <div className="flex gap-2">
               {COLORS.map((c) => (
@@ -108,8 +108,8 @@ export default function CategoryManager({
 
       <div className="space-y-3">
         {categories.length === 0 ? (
-          <p className="text-sm text-zinc-500">
-            Nenhuma categoria cadastrada.
+          <p className="py-8 text-center text-sm text-zinc-500">
+            Nenhuma categoria cadastrada. Crie uma acima.
           </p>
         ) : (
           categories.map((cat) => (

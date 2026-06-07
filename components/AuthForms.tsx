@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { signInWithEmail, signUp, signInWithGoogle } from "@/actions/auth";
+import Input from "@/components/Input";
 
 export function LoginForm() {
   const [error, setError] = useState("");
@@ -49,31 +50,17 @@ export function LoginForm() {
       <form onSubmit={handleSubmit} className="space-y-4">
         {isSignUp && (
           <div>
-            <label className="mb-1 block text-sm text-zinc-400">Nome</label>
-            <input
-              name="name"
-              required
-              className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-2 text-white outline-none focus:border-indigo-500"
-            />
+            <label className="mb-1.5 block text-sm font-medium text-zinc-400">Nome</label>
+            <Input name="name" required />
           </div>
         )}
         <div>
-          <label className="mb-1 block text-sm text-zinc-400">Email</label>
-          <input
-            name="email"
-            type="email"
-            required
-            className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-2 text-white outline-none focus:border-indigo-500"
-          />
+          <label className="mb-1.5 block text-sm font-medium text-zinc-400">Email</label>
+          <Input name="email" type="email" required />
         </div>
         <div>
-          <label className="mb-1 block text-sm text-zinc-400">Senha</label>
-          <input
-            name="password"
-            type="password"
-            required
-            className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-2 text-white outline-none focus:border-indigo-500"
-          />
+          <label className="mb-1.5 block text-sm font-medium text-zinc-400">Senha</label>
+          <Input name="password" type="password" required />
         </div>
         <button
           type="submit"

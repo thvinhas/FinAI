@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createAccount } from "@/actions/accounts";
+import Input from "@/components/Input";
+import Select from "@/components/Select";
 import CurrencyInput from "@/components/CurrencyInput";
 
 const COLORS = [
@@ -36,30 +38,26 @@ export default function AccountForm() {
       )}
 
       <div>
-        <label className="mb-1 block text-sm text-zinc-400">Nome</label>
-        <input
+        <label className="mb-1.5 block text-sm font-medium text-zinc-400">Nome</label>
+        <Input
           name="name"
           required
           placeholder="Ex: Nubank, Itaú, Carteira..."
-          className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-2 text-white outline-none focus:border-indigo-500"
         />
       </div>
 
       <div>
-        <label className="mb-1 block text-sm text-zinc-400">Tipo</label>
-        <select
-          name="type"
-          className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-2 text-white outline-none focus:border-indigo-500"
-        >
+        <label className="mb-1.5 block text-sm font-medium text-zinc-400">Tipo</label>
+        <Select name="type">
           <option value="checking">Conta Corrente</option>
           <option value="savings">Poupança</option>
           <option value="cash">Dinheiro</option>
           <option value="credit">Cartão de Crédito</option>
-        </select>
+        </Select>
       </div>
 
       <div>
-        <label className="mb-1 block text-sm text-zinc-400">
+        <label className="mb-1.5 block text-sm font-medium text-zinc-400">
           Saldo Inicial
         </label>
         <CurrencyInput name="balance" defaultValue={0} />

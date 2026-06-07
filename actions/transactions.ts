@@ -4,20 +4,47 @@ import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 import type { Transaction } from "@/types/database";
 
-export async function getTransactions() {
+export async function getTransactions(filters?: {
+  accountId?: string;
+  categoryId?: string;
+}) {
   const supabase = await createClient();
-  const { data, error } = await supabase
+  let query = supabase
     .from("transactions")
     .select("*, categories(*), accounts!transactions_account_id_fkey(*), destination_account:accounts!transactions_destination_account_id_fkey(*)")
     .order("date", { ascending: false })
     .limit(50);
 
-  if (error) {
-    console.error("getTransactions error:", error);
-    return [];
+  if (filters?.accountId) {
+    query = query.or(
+      `account_id.eq.${filters.accountId},destination_account_id.eq.${filters.accountId}`
+    );
+  }
+  if (filters?.categoryId) {
+    query = query.eq("category_id", filters.categoryId);
   }
 
-  return (data ?? []) as Transaction[];
+  const { data, error } = await query;
+
+  if (error) {
+    console.error("getTransactions error:", error);
+    return { transactions: [], receitas: 0, despesas: 0, saldo: 0 };
+  }
+
+  const transactions = (data ?? []) as Transaction[];
+  const totalReceitas = transactions
+    .filter((t) => t.type === "receita")
+    .reduce((s, t) => s + Number(t.amount), 0);
+  const totalDespesas = transactions
+    .filter((t) => t.type === "despesa")
+    .reduce((s, t) => s + Number(t.amount), 0);
+
+  return {
+    transactions,
+    receitas: totalReceitas,
+    despesas: totalDespesas,
+    saldo: totalReceitas - totalDespesas,
+  };
 }
 
 export async function createTransfer(formData: FormData) {
@@ -181,33 +208,36 @@ export async function deleteTransaction(id: string) {
   revalidatePath("/accounts");
 }
 
-export async function getDashboardData() {
+export async function getDashboardData(year: number, month: number) {
   const supabase = await createClient();
-  const now = new Date();
-  const firstDay = new Date(now.getFullYear(), now.getMonth(), 1)
-    .toISOString()
-    .split("T")[0];
+  const firstDay = new Date(year, month, 1).toISOString().split("T")[0];
+  const lastDay = new Date(year, month + 1, 0).toISOString().split("T")[0];
+  const dayAfterMonth = new Date(year, month + 1, 1).toISOString().split("T")[0];
 
-  const { data: monthTransactions, error: monthError } = await supabase
-    .from("transactions")
-    .select("*, categories(*), accounts!transactions_account_id_fkey(*)")
-    .gte("date", firstDay);
-
-  if (monthError) {
-    console.error("getDashboardData month error:", monthError);
-  }
-
-  const { data: allTransactions } = await supabase
-    .from("transactions")
-    .select("amount, type, date, accounts(name)")
-    .order("date", { ascending: false })
-    .limit(10);
-
-  const { data: accounts } = await supabase
-    .from("accounts")
-    .select("id, name, balance, color, type");
+  const [{ data: monthTransactions }, { data: allTransactions }, { data: accounts }, { data: posMonth }] =
+    await Promise.all([
+      supabase
+        .from("transactions")
+        .select("*, categories(*)")
+        .gte("date", firstDay)
+        .lte("date", lastDay)
+        .order("date", { ascending: false }),
+      supabase
+        .from("transactions")
+        .select("amount, type, date, accounts(name)")
+        .order("date", { ascending: false })
+        .limit(10),
+      supabase
+        .from("accounts")
+        .select("id, name, balance, color, type"),
+      supabase
+        .from("transactions")
+        .select("amount, type")
+        .gte("date", dayAfterMonth),
+    ]);
 
   const entries = monthTransactions ?? [];
+
   const receitas = entries
     .filter((t) => t.type === "receita")
     .reduce((s, t) => s + Number(t.amount), 0);
@@ -226,16 +256,45 @@ export async function getDashboardData() {
     }
   }
 
-  const saldoTotal =
+  const byCategoryReceita: Record<string, { name: string; color: string; value: number }> = {};
+  for (const t of entries.filter((t) => t.type === "receita")) {
+    const cat = t.categories;
+    if (cat) {
+      if (!byCategoryReceita[cat.id]) {
+        byCategoryReceita[cat.id] = { name: cat.name, color: cat.color, value: 0 };
+      }
+      byCategoryReceita[cat.id].value += Number(t.amount);
+    }
+  }
+
+  const deltaPos = (posMonth ?? []).reduce((acc, t) => {
+    if (t.type === "receita") return acc + Number(t.amount);
+    if (t.type === "despesa") return acc - Number(t.amount);
+    return acc;
+  }, 0);
+
+  const saldoAtual =
     accounts?.reduce((s, a) => s + Number(a.balance), 0) ?? 0;
+  const saldoTotal = saldoAtual - deltaPos;
+
+  const economiaValue = receitas - despesas;
+  const economiaPct = receitas > 0 ? (economiaValue / receitas) * 100 : 0;
+
+  const monthLabel = new Date(year, month).toLocaleDateString("pt-BR", {
+    month: "long",
+    year: "numeric",
+  });
 
   return {
-    saldo: receitas - despesas,
+    saldo: economiaValue,
     saldoTotal,
     receitas,
     despesas,
     recentes: allTransactions ?? [],
     byCategory: Object.values(byCategory),
+    byCategoryReceita: Object.values(byCategoryReceita),
     accounts: accounts ?? [],
+    monthlyData: { receita: receitas, despesa: despesas, saldo: economiaValue, label: monthLabel },
+    economia: { value: economiaValue, pct: economiaPct },
   };
 }
