@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { getAccounts } from "@/actions/accounts";
 import Header from "@/components/Header";
+import Toast from "@/components/Toast";
 import AccountList from "./AccountList";
 
 export default async function AccountsPage() {
@@ -12,6 +13,7 @@ export default async function AccountsPage() {
   return (
     <>
       <Header userName={user?.email} />
+      <Suspense fallback={null}><Toast /></Suspense>
       <main className="mx-auto max-w-3xl px-4 py-8">
         <Suspense
           fallback={

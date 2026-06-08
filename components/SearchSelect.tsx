@@ -32,6 +32,7 @@ export default function SearchSelect({
   className,
   required,
   searchPlaceholder,
+  defaultValue,
 }: {
   options: SelectOption[];
   value?: string;
@@ -41,15 +42,16 @@ export default function SearchSelect({
   className?: string;
   required?: boolean;
   searchPlaceholder?: string;
+  defaultValue?: string;
 }) {
   const [open, setOpen] = React.useState(false);
-  const [selected, setSelected] = React.useState(value ?? "");
+  const [selected, setSelected] = React.useState(value ?? defaultValue ?? "");
   const hiddenRef = React.useRef<HTMLInputElement>(null);
 
   const selectedOption = options.find((o) => o.value === selected);
 
   React.useEffect(() => {
-    setSelected(value ?? "");
+    if (value !== undefined) setSelected(value);
   }, [value]);
 
   const handleSelect = (v: string) => {

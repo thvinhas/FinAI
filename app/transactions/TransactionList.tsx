@@ -2,9 +2,11 @@
 
 import { deleteTransaction } from "@/actions/transactions";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Wallet, TrendingUp, TrendingDown } from "lucide-react";
+import { Wallet, TrendingUp, TrendingDown, Pencil, Trash2, Calendar } from "lucide-react";
 import SearchSelect from "@/components/SearchSelect";
+import DataTable from "@/components/DataTable";
 import type { Transaction } from "@/types/database";
+import type { ColumnDef } from "@tanstack/react-table";
 
 type FilterItem = { id: string; name: string; color?: string };
 
@@ -29,6 +31,8 @@ export default function TransactionList({
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const dateFrom = searchParams.get("dateFrom") ?? "";
+  const dateTo = searchParams.get("dateTo") ?? "";
 
   const setFilter = (key: string, value: string) => {
     const p = new URLSearchParams(searchParams.toString());
@@ -36,6 +40,158 @@ export default function TransactionList({
     else p.delete(key);
     router.push(`/transactions?${p.toString()}`);
   };
+
+  const columns: ColumnDef<Transaction>[] = [
+    {
+      accessorKey: "date",
+      header: "Data",
+      cell: ({ row }) => (
+        <span className="text-zinc-300">
+          {new Date(row.original.date).toLocaleDateString("pt-BR")}
+        </span>
+      ),
+    },
+    {
+      accessorKey: "description",
+      header: "Descrição",
+      cell: ({ row }) => {
+        const t = row.original;
+        return t.type === "transferencia" ? (
+          <span className="text-indigo-400">Transferência</span>
+        ) : (
+          <span className="max-w-[140px] truncate text-white sm:max-w-none">
+            {t.description}
+          </span>
+        );
+      },
+    },
+    {
+      accessorKey: "account",
+      header: "Conta",
+      cell: ({ row }) => {
+        const t = row.original;
+        if (t.type === "transferencia") {
+          return (
+            <div className="flex items-center gap-1.5">
+              {t.accounts ? (
+                <span
+                  className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs"
+                  style={{
+                    backgroundColor: t.accounts.color + "20",
+                    color: t.accounts.color,
+                  }}
+                >
+                  {t.accounts.name}
+                </span>
+              ) : (
+                <span className="text-zinc-600">—</span>
+              )}
+              <span className="text-zinc-500">→</span>
+              {t.destination_account ? (
+                <span
+                  className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs"
+                  style={{
+                    backgroundColor:
+                      t.destination_account.color + "20",
+                    color: t.destination_account.color,
+                  }}
+                >
+                  {t.destination_account.name}
+                </span>
+              ) : (
+                <span className="text-zinc-600">—</span>
+              )}
+            </div>
+          );
+        }
+        return t.accounts ? (
+          <span
+            className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs"
+            style={{
+              backgroundColor: t.accounts.color + "20",
+              color: t.accounts.color,
+            }}
+          >
+            {t.accounts.name}
+          </span>
+        ) : (
+          <span className="text-zinc-600">—</span>
+        );
+      },
+    },
+    {
+      accessorKey: "category",
+      header: "Categoria",
+      cell: ({ row }) => {
+        const c = row.original.categories;
+        return c ? (
+          <span
+            className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs"
+            style={{
+              backgroundColor: c.color + "20",
+              color: c.color,
+            }}
+          >
+            {c.name}
+          </span>
+        ) : (
+          <span className="text-zinc-600">—</span>
+        );
+      },
+    },
+    {
+      accessorKey: "amount",
+      header: "Valor",
+      sortingFn: "basic",
+      cell: ({ row }) => {
+        const t = row.original;
+        return (
+          <span
+            className={`font-medium ${
+              t.type === "receita"
+                ? "text-emerald-400"
+                : t.type === "transferencia"
+                  ? "text-indigo-400"
+                  : "text-red-400"
+            }`}
+          >
+            {t.type === "receita" ? "+" : t.type === "transferencia" ? "⇄" : "-"}
+            R$ {Number(t.amount).toFixed(2)}
+          </span>
+        );
+      },
+    },
+    {
+      id: "actions",
+      header: "",
+      cell: ({ row }) => {
+        const t = row.original;
+        return (
+          <div className="flex items-center gap-2">
+            <a
+              href={`/transactions/${t.id}/edit`}
+              className="text-zinc-600 transition-colors hover:text-indigo-400"
+            >
+              <Pencil size={15} />
+            </a>
+            <form
+              action={async () => {
+                await deleteTransaction(t.id);
+                router.refresh();
+              }}
+            >
+              <button
+                type="submit"
+                className="text-zinc-600 transition-colors hover:text-red-400"
+              >
+                <Trash2 size={15} />
+              </button>
+            </form>
+          </div>
+        );
+      },
+    },
+  ];
 
   return (
     <div className="space-y-6">
@@ -81,7 +237,7 @@ export default function TransactionList({
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-3">
+      <div className="flex flex-wrap items-end gap-3">
         <SearchSelect
           value={selectedAccount}
           onChange={(v) => setFilter("account", v)}
@@ -114,7 +270,29 @@ export default function TransactionList({
           ]}
         />
 
-        {(selectedAccount || selectedCategory) && (
+        <div className="flex items-center gap-2">
+          <div className="relative">
+            <Calendar size={14} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-500" />
+            <input
+              type="date"
+              value={dateFrom}
+              onChange={(e) => setFilter("dateFrom", e.target.value)}
+              className="w-[140px] rounded-lg border border-zinc-800 bg-zinc-900/50 py-2 pl-8 pr-2.5 text-sm text-white outline-none transition-all hover:border-zinc-600 focus:border-indigo-500"
+            />
+          </div>
+          <span className="text-xs text-zinc-500">até</span>
+          <div className="relative">
+            <Calendar size={14} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-500" />
+            <input
+              type="date"
+              value={dateTo}
+              onChange={(e) => setFilter("dateTo", e.target.value)}
+              className="w-[140px] rounded-lg border border-zinc-800 bg-zinc-900/50 py-2 pl-8 pr-2.5 text-sm text-white outline-none transition-all hover:border-zinc-600 focus:border-indigo-500"
+            />
+          </div>
+        </div>
+
+        {(selectedAccount || selectedCategory || dateFrom || dateTo) && (
           <button
             onClick={() => router.push("/transactions")}
             className="rounded-lg border border-zinc-700 px-3 py-2 text-sm text-zinc-400 transition hover:border-red-500 hover:text-red-400"
@@ -141,139 +319,13 @@ export default function TransactionList({
           )}
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-zinc-800">
-          <table className="w-full text-left text-sm">
-            <thead className="bg-zinc-900">
-              <tr>
-                <th className="px-3 py-3 font-medium text-zinc-400 sm:px-4">
-                  Data
-                </th>
-                <th className="px-3 py-3 font-medium text-zinc-400 sm:px-4">
-                  Descrição
-                </th>
-                <th className="hidden px-3 py-3 font-medium text-zinc-400 sm:table-cell sm:px-4">
-                  Conta
-                </th>
-                <th className="hidden px-3 py-3 font-medium text-zinc-400 sm:table-cell sm:px-4">
-                  Categoria
-                </th>
-                <th className="px-3 py-3 font-medium text-zinc-400 sm:px-4">
-                  Valor
-                </th>
-                <th className="px-3 py-3 sm:px-4"></th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-zinc-800">
-              {transactions.map((t) => (
-                <tr key={t.id} className="bg-zinc-950 hover:bg-zinc-900/50">
-                  <td className="whitespace-nowrap px-3 py-3 text-zinc-300 sm:px-4">
-                    {new Date(t.date).toLocaleDateString("pt-BR")}
-                  </td>
-                  <td className="max-w-[140px] truncate px-3 py-3 text-white sm:max-w-none sm:px-4">
-                    {t.type === "transferencia" ? (
-                      <span className="text-indigo-400">Transferência</span>
-                    ) : (
-                      t.description
-                    )}
-                  </td>
-                  <td className="hidden px-3 py-3 sm:table-cell sm:px-4">
-                    {t.type === "transferencia" ? (
-                      <div className="flex items-center gap-1.5">
-                        {t.accounts ? (
-                          <span
-                            className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs"
-                            style={{
-                              backgroundColor: t.accounts.color + "20",
-                              color: t.accounts.color,
-                            }}
-                          >
-                            {t.accounts.name}
-                          </span>
-                        ) : (
-                          <span className="text-zinc-600">—</span>
-                        )}
-                        <span className="text-zinc-500">→</span>
-                        {t.destination_account ? (
-                          <span
-                            className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs"
-                            style={{
-                              backgroundColor:
-                                t.destination_account.color + "20",
-                              color: t.destination_account.color,
-                            }}
-                          >
-                            {t.destination_account.name}
-                          </span>
-                        ) : (
-                          <span className="text-zinc-600">—</span>
-                        )}
-                      </div>
-                    ) : t.accounts ? (
-                      <span
-                        className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs"
-                        style={{
-                          backgroundColor: t.accounts.color + "20",
-                          color: t.accounts.color,
-                        }}
-                      >
-                        {t.accounts.name}
-                      </span>
-                    ) : (
-                      <span className="text-zinc-600">—</span>
-                    )}
-                  </td>
-                  <td className="hidden px-3 py-3 sm:table-cell sm:px-4">
-                    {t.categories ? (
-                      <span
-                        className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs"
-                        style={{
-                          backgroundColor: t.categories.color + "20",
-                          color: t.categories.color,
-                        }}
-                      >
-                        {t.categories.name}
-                      </span>
-                    ) : (
-                      <span className="text-zinc-600">—</span>
-                    )}
-                  </td>
-                  <td
-                    className={`whitespace-nowrap px-3 py-3 font-medium sm:px-4 ${
-                      t.type === "receita"
-                        ? "text-emerald-400"
-                        : t.type === "transferencia"
-                          ? "text-indigo-400"
-                          : "text-red-400"
-                    }`}
-                  >
-                    {t.type === "receita"
-                      ? "+"
-                      : t.type === "transferencia"
-                        ? "⇄"
-                        : "-"}
-                    R$ {Number(t.amount).toFixed(2)}
-                  </td>
-                  <td className="px-3 py-3 sm:px-4">
-                    <form
-                      action={async () => {
-                        await deleteTransaction(t.id);
-                        router.refresh();
-                      }}
-                    >
-                      <button
-                        type="submit"
-                        className="text-sm text-zinc-600 transition-colors hover:text-red-400"
-                      >
-                        <span className="hidden sm:inline">Excluir</span>
-                        <span className="sm:hidden">✕</span>
-                      </button>
-                    </form>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <DataTable
+          columns={columns}
+          data={transactions}
+          searchKey="description"
+          searchPlaceholder="Buscar por descrição..."
+          pageSize={10}
+        />
       )}
     </div>
   );

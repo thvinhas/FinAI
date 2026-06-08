@@ -7,13 +7,15 @@ import type { Transaction } from "@/types/database";
 export async function getTransactions(filters?: {
   accountId?: string;
   categoryId?: string;
+  dateFrom?: string;
+  dateTo?: string;
 }) {
   const supabase = await createClient();
   let query = supabase
     .from("transactions")
     .select("*, categories(*), accounts!transactions_account_id_fkey(*), destination_account:accounts!transactions_destination_account_id_fkey(*)")
     .order("date", { ascending: false })
-    .limit(50);
+    .limit(500);
 
   if (filters?.accountId) {
     query = query.or(
@@ -22,6 +24,12 @@ export async function getTransactions(filters?: {
   }
   if (filters?.categoryId) {
     query = query.eq("category_id", filters.categoryId);
+  }
+  if (filters?.dateFrom) {
+    query = query.gte("date", filters.dateFrom);
+  }
+  if (filters?.dateTo) {
+    query = query.lte("date", filters.dateTo);
   }
 
   const { data, error } = await query;
@@ -146,6 +154,40 @@ export async function createTransaction(formData: FormData) {
   revalidatePath("/transactions");
   revalidatePath("/dashboard");
   revalidatePath("/accounts");
+}
+
+export async function getTransaction(id: string) {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("transactions")
+    .select("*, categories(*), accounts!transactions_account_id_fkey(*), destination_account:accounts!transactions_destination_account_id_fkey(*)")
+    .eq("id", id)
+    .single();
+  if (error) return null;
+  return data as Transaction;
+}
+
+export async function updateTransaction(id: string, formData: FormData) {
+  const supabase = await createClient();
+  const amount = parseFloat(formData.get("amount") as string);
+  const accountId = formData.get("account_id") as string;
+  const type = formData.get("type") as string;
+
+  const { error } = await supabase
+    .from("transactions")
+    .update({
+      amount,
+      type,
+      account_id: accountId || null,
+      category_id: formData.get("category_id") || null,
+      description: formData.get("description"),
+      date: formData.get("date"),
+    })
+    .eq("id", id);
+
+  if (error) return { error: error.message };
+  revalidatePath("/transactions");
+  revalidatePath("/dashboard");
 }
 
 export async function deleteTransaction(id: string) {

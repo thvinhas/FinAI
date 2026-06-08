@@ -44,6 +44,31 @@ export async function createAccount(formData: FormData) {
   revalidatePath("/dashboard");
 }
 
+export async function getAccount(id: string): Promise<Account | null> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("accounts")
+    .select("*")
+    .eq("id", id)
+    .single();
+  return data ?? null;
+}
+
+export async function updateAccount(id: string, formData: FormData) {
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("accounts")
+    .update({
+      name: formData.get("name"),
+      type: formData.get("type"),
+      color: formData.get("color") || "#6366f1",
+    })
+    .eq("id", id);
+  if (error) return { error: error.message };
+  revalidatePath("/accounts");
+  revalidatePath("/dashboard");
+}
+
 export async function archiveAccount(id: string) {
   const supabase = await createClient();
   const { error } = await supabase

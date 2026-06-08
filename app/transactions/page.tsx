@@ -2,12 +2,13 @@ import { Suspense } from "react";
 import { getTransactions } from "@/actions/transactions";
 import { createClient } from "@/lib/supabase/server";
 import Header from "@/components/Header";
+import Toast from "@/components/Toast";
 import TransactionList from "./TransactionList";
 
 export default async function TransactionsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ account?: string; category?: string }>;
+  searchParams: Promise<{ account?: string; category?: string; dateFrom?: string; dateTo?: string }>;
 }) {
   const supabase = await createClient();
   const { data: { session } } = await supabase.auth.getSession();
@@ -18,6 +19,7 @@ export default async function TransactionsPage({
   return (
     <>
       <Header userName={user?.email} />
+      <Suspense fallback={null}><Toast /></Suspense>
       <main className="mx-auto max-w-6xl px-4 py-8">
         <Suspense
           fallback={
@@ -64,6 +66,8 @@ export default async function TransactionsPage({
           <TransactionsContent
             accountId={params.account}
             categoryId={params.category}
+            dateFrom={params.dateFrom}
+            dateTo={params.dateTo}
             userId={user!.id}
           />
         </Suspense>
@@ -75,17 +79,21 @@ export default async function TransactionsPage({
 async function TransactionsContent({
   accountId,
   categoryId,
+  dateFrom,
+  dateTo,
   userId,
 }: {
   accountId?: string;
   categoryId?: string;
+  dateFrom?: string;
+  dateTo?: string;
   userId: string;
 }) {
   const supabase = await createClient();
 
   const [{ transactions, receitas, despesas, saldo }, { data: accounts }, { data: categories }] =
     await Promise.all([
-      getTransactions({ accountId, categoryId }),
+      getTransactions({ accountId, categoryId, dateFrom, dateTo }),
       supabase
         .from("accounts")
         .select("id, name, color")

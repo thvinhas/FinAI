@@ -6,19 +6,24 @@ import { createTransaction, createTransfer } from "@/actions/transactions";
 import Input from "@/components/Input";
 import SearchSelect from "@/components/SearchSelect";
 import CurrencyInput from "@/components/CurrencyInput";
-import type { Category, Account } from "@/types/database";
+import type { Category, Account, Transaction } from "@/types/database";
+import { updateTransaction } from "@/actions/transactions";
 
 type FormType = "receita" | "despesa" | "transferencia";
 
 export default function TransactionForm({
   categories,
   accounts,
+  initialData,
 }: {
   categories: Category[];
   accounts: Account[];
+  initialData?: Transaction;
 }) {
   const router = useRouter();
-  const [type, setType] = useState<FormType>("despesa");
+  const [type, setType] = useState<FormType>(
+    (initialData?.type as FormType) ?? "despesa"
+  );
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
 
@@ -32,12 +37,18 @@ export default function TransactionForm({
     const formType = formData.get("type") as FormType;
 
     const result =
-      formType === "transferencia"
-        ? await createTransfer(formData)
-        : await createTransaction(formData);
+      initialData
+        ? await updateTransaction(initialData.id, formData)
+        : formType === "transferencia"
+          ? await createTransfer(formData)
+          : await createTransaction(formData);
 
     if (result?.error) setError(result.error);
-    else router.push("/transactions");
+    else router.push(
+      initialData
+        ? "/transactions?success=Transação+atualizada"
+        : "/transactions?success=Transação+criada"
+    );
     setPending(false);
   }
 
@@ -84,6 +95,7 @@ export default function TransactionForm({
               required
               placeholder="Selecione"
               searchPlaceholder="Buscar conta..."
+              defaultValue={initialData?.account_id ?? ""}
               options={[
                 { value: "", label: "Selecione" },
                 ...accounts.map((a) => ({
@@ -103,6 +115,7 @@ export default function TransactionForm({
               required
               placeholder="Selecione"
               searchPlaceholder="Buscar conta..."
+              defaultValue={initialData?.destination_account_id ?? ""}
               options={[
                 { value: "", label: "Selecione" },
                 ...accounts.map((a) => ({
@@ -115,14 +128,23 @@ export default function TransactionForm({
           </div>
           <div>
             <label className="mb-1.5 block text-sm font-medium text-zinc-400">Valor</label>
-            <CurrencyInput name="amount" required placeholder="0,00" />
+            <CurrencyInput
+              name="amount"
+              required
+              placeholder="0,00"
+              defaultValue={initialData?.amount ?? 0}
+            />
           </div>
           <div>
             <label className="mb-1.5 block text-sm font-medium text-zinc-400">Data</label>
             <Input
               name="date"
               type="date"
-              defaultValue={new Date().toISOString().split("T")[0]}
+              defaultValue={
+                initialData
+                  ? initialData.date.split("T")[0]
+                  : new Date().toISOString().split("T")[0]
+              }
             />
           </div>
         </>
@@ -130,7 +152,12 @@ export default function TransactionForm({
         <>
           <div>
             <label className="mb-1.5 block text-sm font-medium text-zinc-400">Valor</label>
-            <CurrencyInput name="amount" required placeholder="0,00" />
+            <CurrencyInput
+              name="amount"
+              required
+              placeholder="0,00"
+              defaultValue={initialData?.amount ?? 0}
+            />
           </div>
           <div>
             <label className="mb-1.5 block text-sm font-medium text-zinc-400">
@@ -140,6 +167,7 @@ export default function TransactionForm({
               name="description"
               required
               placeholder="Ex: Salário, Supermercado..."
+              defaultValue={initialData?.description ?? ""}
             />
           </div>
           <div>
@@ -148,6 +176,7 @@ export default function TransactionForm({
               name="account_id"
               placeholder="Selecione uma conta"
               searchPlaceholder="Buscar conta..."
+              defaultValue={initialData?.account_id ?? ""}
               options={[
                 { value: "", label: "Selecione uma conta" },
                 ...accounts.map((a) => ({
@@ -167,6 +196,7 @@ export default function TransactionForm({
               name="category_id"
               placeholder="Sem categoria"
               searchPlaceholder="Buscar categoria..."
+              defaultValue={initialData?.category_id ?? ""}
               options={[
                 { value: "", label: "Sem categoria" },
                 ...filteredCategories.map((c) => ({
@@ -182,7 +212,11 @@ export default function TransactionForm({
             <Input
               name="date"
               type="date"
-              defaultValue={new Date().toISOString().split("T")[0]}
+              defaultValue={
+                initialData
+                  ? initialData.date.split("T")[0]
+                  : new Date().toISOString().split("T")[0]
+              }
             />
           </div>
         </>

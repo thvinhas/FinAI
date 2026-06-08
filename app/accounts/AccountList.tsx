@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { archiveAccount, restoreAccount } from "@/actions/accounts";
-import { PiggyBank, Building2, Wallet, CreditCard, Archive, RotateCcw } from "lucide-react";
+import { PiggyBank, Building2, Wallet, CreditCard, Archive, RotateCcw, Pencil } from "lucide-react";
 import type { Account } from "@/types/database";
 
 const icons: Record<string, React.ReactNode> = {
@@ -82,20 +82,29 @@ export default function AccountList({
             >
               R$ {Number(acc.balance).toFixed(2)}
             </p>
-            <form
-              action={async () => {
-                await archiveAccount(acc.id);
-                router.refresh();
-              }}
-            >
-              <button
-                type="submit"
-                className="flex items-center gap-1 text-sm text-zinc-600 transition-colors hover:text-yellow-400"
+            <div className="flex items-center gap-2">
+              <a
+                href={`/accounts/${acc.id}/edit`}
+                className="flex items-center gap-1 text-sm text-zinc-600 transition-colors hover:text-indigo-400"
               >
-                <Archive size={14} />
-                <span className="hidden sm:inline">Arquivar</span>
-              </button>
-            </form>
+                <Pencil size={14} />
+                <span className="hidden sm:inline">Editar</span>
+              </a>
+              <form
+                action={async () => {
+                  await archiveAccount(acc.id);
+                  router.refresh();
+                }}
+              >
+                <button
+                  type="submit"
+                  className="flex items-center gap-1 text-sm text-zinc-600 transition-colors hover:text-yellow-400"
+                >
+                  <Archive size={14} />
+                  <span className="hidden sm:inline">Arquivar</span>
+                </button>
+              </form>
+            </div>
           </div>
         </div>
       ))}

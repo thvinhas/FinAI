@@ -93,13 +93,14 @@ export default function DashboardCharts({ data }: { data: DashboardData }) {
             </p>
           ) : (
             <div className="-mx-2">
-              <ResponsiveContainer width="100%" height={280}>
+              <ResponsiveContainer width="100%" height={320}>
                 <BarChart
                   data={[
                     { name: "Receita", valor: data.receitas, fill: "#34d399" },
                     { name: "Despesa", valor: data.despesas, fill: "#f87171" },
-                    { name: "Saldo", valor: data.monthlyData.saldo, fill: "#818cf8" },
                   ]}
+                  barGap={4}
+                  barCategoryGap={0}
                 >
                   <CartesianGrid
                     strokeDasharray="3 3"
@@ -134,13 +135,12 @@ export default function DashboardCharts({ data }: { data: DashboardData }) {
                   />
                   <Bar
                     dataKey="valor"
-                    radius={4}
-                    maxBarSize={48}
+                    radius={[4, 4, 0, 0]}
+                    maxBarSize={160}
                   >
                     {[
                       { valor: data.receitas, fill: "#34d399" },
                       { valor: data.despesas, fill: "#f87171" },
-                      { valor: data.monthlyData.saldo, fill: "#818cf8" },
                     ].map((entry, i) => (
                       <Cell key={i} fill={entry.fill} />
                     ))}
@@ -157,10 +157,6 @@ export default function DashboardCharts({ data }: { data: DashboardData }) {
             <span className="flex items-center gap-1.5">
               <span className="h-2.5 w-2.5 rounded-sm bg-red-400" />
               Despesa
-            </span>
-            <span className="flex items-center gap-1.5">
-              <span className="h-2.5 w-2.5 rounded-sm bg-indigo-400" />
-              Saldo
             </span>
           </div>
         </div>
