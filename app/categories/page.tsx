@@ -1,8 +1,13 @@
 import { Suspense } from "react";
-import { getCategories } from "@/actions/categories";
+import type { Metadata } from "next";
+import { getCategories, getArchivedCategories } from "@/actions/categories";
 import { createClient } from "@/lib/supabase/server";
 import Header from "@/components/Header";
 import CategoryManager from "./CategoryManager";
+
+export const metadata: Metadata = {
+  title: "Categorias - FinApp",
+};
 
 export default async function CategoriesPage() {
   const supabase = await createClient();
@@ -57,12 +62,18 @@ export default async function CategoriesPage() {
 }
 
 async function CategoriesContent() {
-  const categories = await getCategories();
+  const [categories, archivedCategories] = await Promise.all([
+    getCategories(),
+    getArchivedCategories(),
+  ]);
 
   return (
     <>
       <h1 className="mb-8 text-2xl font-bold text-white">Categorias</h1>
-      <CategoryManager categories={categories} />
+      <CategoryManager
+        categories={categories}
+        archivedCategories={archivedCategories}
+      />
     </>
   );
 }

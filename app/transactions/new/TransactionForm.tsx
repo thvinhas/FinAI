@@ -157,6 +157,7 @@ export default function TransactionForm({
               required
               placeholder="0,00"
               defaultValue={initialData?.amount ?? 0}
+              autoFocus={!initialData}
             />
           </div>
           <div>

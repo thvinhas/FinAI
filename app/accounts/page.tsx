@@ -1,9 +1,14 @@
 import { Suspense } from "react";
+import type { Metadata } from "next";
 import { createClient } from "@/lib/supabase/server";
-import { getAccounts } from "@/actions/accounts";
+import { getAccounts, getArchivedAccounts } from "@/actions/accounts";
 import Header from "@/components/Header";
 import Toast from "@/components/Toast";
 import AccountList from "./AccountList";
+
+export const metadata: Metadata = {
+  title: "Contas - FinApp",
+};
 
 export default async function AccountsPage() {
   const supabase = await createClient();
@@ -44,7 +49,10 @@ export default async function AccountsPage() {
 }
 
 async function AccountsContent() {
-  const accounts = await getAccounts();
+  const [accounts, archivedAccounts] = await Promise.all([
+    getAccounts(),
+    getArchivedAccounts(),
+  ]);
 
   return (
     <>
@@ -57,7 +65,10 @@ async function AccountsContent() {
           Nova Conta
         </a>
       </div>
-      <AccountList accounts={accounts ?? []} />
+      <AccountList
+        accounts={accounts ?? []}
+        archivedAccounts={archivedAccounts ?? []}
+      />
     </>
   );
 }

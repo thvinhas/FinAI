@@ -1,7 +1,12 @@
+import type { Metadata } from "next";
 import { createClient } from "@/lib/supabase/server";
 import { getTransaction } from "@/actions/transactions";
 import Header from "@/components/Header";
 import TransactionForm from "../../new/TransactionForm";
+
+export const metadata: Metadata = {
+  title: "Editar Transação - FinApp",
+};
 
 export default async function EditTransactionPage({
   params,

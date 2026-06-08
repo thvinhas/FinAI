@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Wallet, TrendingUp, TrendingDown, Pencil, Trash2, Calendar } from "lucide-react";
 import SearchSelect from "@/components/SearchSelect";
 import DataTable from "@/components/DataTable";
+import MobileTransactionCards from "@/components/MobileTransactionCards";
 import type { Transaction } from "@/types/database";
 import type { ColumnDef } from "@tanstack/react-table";
 
@@ -175,6 +176,9 @@ export default function TransactionList({
               <Pencil size={15} />
             </a>
             <form
+              onSubmit={(e) => {
+                if (!confirm("Excluir esta transação?")) e.preventDefault();
+              }}
               action={async () => {
                 await deleteTransaction(t.id);
                 router.refresh();
@@ -319,13 +323,18 @@ export default function TransactionList({
           )}
         </div>
       ) : (
-        <DataTable
-          columns={columns}
-          data={transactions}
-          searchKey="description"
-          searchPlaceholder="Buscar por descrição..."
-          pageSize={10}
-        />
+        <>
+          <div className="hidden sm:block">
+            <DataTable
+              columns={columns}
+              data={transactions}
+              searchKey="description"
+              searchPlaceholder="Buscar por descrição..."
+              pageSize={10}
+            />
+          </div>
+          <MobileTransactionCards transactions={transactions} />
+        </>
       )}
     </div>
   );

@@ -21,8 +21,10 @@ const labels: Record<string, string> = {
 
 export default function AccountList({
   accounts,
+  archivedAccounts,
 }: {
   accounts: Account[];
+  archivedAccounts?: Account[];
 }) {
   const router = useRouter();
 
@@ -55,7 +57,8 @@ export default function AccountList({
         </p>
       </div>
 
-      {accounts.map((acc) => (
+      {accounts.map((acc) => {
+        return (
         <div
           key={acc.id}
           className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-zinc-800 bg-zinc-900/50 px-5 py-4"
@@ -91,6 +94,9 @@ export default function AccountList({
                 <span className="hidden sm:inline">Editar</span>
               </a>
               <form
+                onSubmit={(e) => {
+                  if (!confirm("Arquivar esta conta?")) e.preventDefault();
+                }}
                 action={async () => {
                   await archiveAccount(acc.id);
                   router.refresh();
@@ -107,7 +113,49 @@ export default function AccountList({
             </div>
           </div>
         </div>
-      ))}
+      );
+      })}
+
+      {archivedAccounts && archivedAccounts.length > 0 && (
+        <details className="group rounded-xl border border-zinc-800">
+          <summary className="flex cursor-pointer items-center gap-2 px-5 py-3 text-sm text-zinc-500 transition-colors hover:text-zinc-300">
+            <Archive size={14} />
+            Contas arquivadas ({archivedAccounts.length})
+          </summary>
+          <div className="divide-y divide-zinc-800 border-t border-zinc-800">
+            {archivedAccounts.map((acc) => (
+              <div
+                key={acc.id}
+                className="flex flex-wrap items-center justify-between gap-3 px-5 py-3"
+              >
+                <div className="flex min-w-0 flex-1 items-center gap-3">
+                  <div
+                    className="h-3 w-3 shrink-0 rounded-full opacity-50"
+                    style={{ backgroundColor: acc.color }}
+                  />
+                  <span className="truncate text-sm text-zinc-400">
+                    {acc.name}
+                  </span>
+                </div>
+                <form
+                  action={async () => {
+                    await restoreAccount(acc.id);
+                    router.refresh();
+                  }}
+                >
+                  <button
+                    type="submit"
+                    className="flex items-center gap-1 text-sm text-zinc-600 transition-colors hover:text-emerald-400"
+                  >
+                    <RotateCcw size={14} />
+                    <span className="hidden sm:inline">Restaurar</span>
+                  </button>
+                </form>
+              </div>
+            ))}
+          </div>
+        </details>
+      )}
     </div>
   );
 }

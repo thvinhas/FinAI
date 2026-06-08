@@ -1,7 +1,12 @@
+import type { Metadata } from "next";
 import { createClient } from "@/lib/supabase/server";
 import { getAccount } from "@/actions/accounts";
 import Header from "@/components/Header";
 import AccountForm from "../../new/AccountForm";
+
+export const metadata: Metadata = {
+  title: "Editar Conta - FinApp",
+};
 
 export default async function EditAccountPage({
   params,

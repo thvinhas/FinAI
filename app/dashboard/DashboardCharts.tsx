@@ -12,7 +12,7 @@ import {
   Pie,
   Cell,
 } from "recharts";
-import { Wallet, TrendingUp, TrendingDown } from "lucide-react";
+import { Wallet, TrendingUp, TrendingDown, ArrowRight } from "lucide-react";
 
 type DashboardData = {
   saldoTotal: number;
@@ -28,6 +28,11 @@ type DashboardData = {
 export default function DashboardCharts({ data }: { data: DashboardData }) {
   const economiaPct = Math.min(100, Math.abs(data.economia.pct));
   const isPositive = data.economia.pct >= 0;
+  const isEmpty =
+    data.receitas === 0 &&
+    data.despesas === 0 &&
+    data.byCategory.length === 0 &&
+    data.byCategoryReceita.length === 0;
 
   const gaugeData = [
     {
@@ -37,6 +42,42 @@ export default function DashboardCharts({ data }: { data: DashboardData }) {
     },
     { name: "Restante", value: 100 - economiaPct, fill: "#27272a" },
   ];
+
+  if (isEmpty) {
+    return (
+      <div className="space-y-6">
+        <div className="grid gap-3 sm:grid-cols-3">
+          <div className="flex items-center gap-4 rounded-xl border border-zinc-800 bg-zinc-900/50 p-4 sm:p-6">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-zinc-800 sm:h-12 sm:w-12">
+              <Wallet size={22} className="text-indigo-400" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-xs text-zinc-400 sm:text-sm">Saldo Total</p>
+              <p className="truncate text-lg font-bold text-emerald-400 sm:text-2xl">
+                R$ {data.saldoTotal.toFixed(2)}
+              </p>
+            </div>
+          </div>
+        </div>
+        <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-12 text-center">
+          <p className="mb-2 text-lg font-medium text-white">
+            Bem-vindo ao FinApp!
+          </p>
+          <p className="mb-6 text-sm text-zinc-400">
+            Nenhuma movimentação encontrada neste mês. Crie sua primeira
+            transação para começar.
+          </p>
+          <a
+            href="/transactions/new"
+            className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-indigo-700"
+          >
+            Criar primeira transação
+            <ArrowRight size={16} />
+          </a>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -246,7 +287,11 @@ export default function DashboardCharts({ data }: { data: DashboardData }) {
                     ))}
                   </Pie>
                   <Tooltip
-                    formatter={(value) => `R$ ${Number(value).toFixed(2)}`}
+                    formatter={(value, name) => {
+                      const total = data.byCategoryReceita.reduce((s, c) => s + c.value, 0);
+                      const pct = total > 0 ? ((Number(value) / total) * 100).toFixed(1) : "0";
+                      return [`R$ ${Number(value).toFixed(2)} (${pct}%)`, name];
+                    }}
                     contentStyle={{
                       background: "#18181b",
                       border: "1px solid #27272a",
@@ -305,7 +350,11 @@ export default function DashboardCharts({ data }: { data: DashboardData }) {
                     ))}
                   </Pie>
                   <Tooltip
-                    formatter={(value) => `R$ ${Number(value).toFixed(2)}`}
+                    formatter={(value, name) => {
+                      const total = data.byCategory.reduce((s, c) => s + c.value, 0);
+                      const pct = total > 0 ? ((Number(value) / total) * 100).toFixed(1) : "0";
+                      return [`R$ ${Number(value).toFixed(2)} (${pct}%)`, name];
+                    }}
                     contentStyle={{
                       background: "#18181b",
                       border: "1px solid #27272a",

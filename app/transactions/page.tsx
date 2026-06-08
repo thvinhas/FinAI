@@ -1,9 +1,14 @@
 import { Suspense } from "react";
+import type { Metadata } from "next";
 import { getTransactions } from "@/actions/transactions";
 import { createClient } from "@/lib/supabase/server";
 import Header from "@/components/Header";
 import Toast from "@/components/Toast";
 import TransactionList from "./TransactionList";
+
+export const metadata: Metadata = {
+  title: "Transações - FinApp",
+};
 
 export default async function TransactionsPage({
   searchParams,

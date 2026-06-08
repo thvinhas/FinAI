@@ -1,9 +1,14 @@
 import { Suspense } from "react";
+import type { Metadata } from "next";
 import { getDashboardData } from "@/actions/transactions";
 import { createClient } from "@/lib/supabase/server";
 import Header from "@/components/Header";
 import MonthPicker from "./MonthPicker";
 import DashboardCharts from "./DashboardCharts";
+
+export const metadata: Metadata = {
+  title: "Dashboard - FinApp",
+};
 
 export default async function DashboardPage({
   searchParams,

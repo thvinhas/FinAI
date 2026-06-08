@@ -2,8 +2,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { createCategory, archiveCategory, updateCategory } from "@/actions/categories";
-import { Archive, Pencil } from "lucide-react";
+import { createCategory, archiveCategory, restoreCategory, updateCategory } from "@/actions/categories";
+import { Archive, Pencil, RotateCcw } from "lucide-react";
 import Input from "@/components/Input";
 import {
   Dialog,
@@ -23,8 +23,10 @@ const COLORS = [
 
 export default function CategoryManager({
   categories,
+  archivedCategories,
 }: {
   categories: Category[];
+  archivedCategories?: Category[];
 }) {
   const router = useRouter();
   const [error, setError] = useState("");
@@ -33,6 +35,8 @@ export default function CategoryManager({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const [editColor, setEditColor] = useState("");
+  const [editPending, setEditPending] = useState(false);
+  const [archiveError, setArchiveError] = useState<string | null>(null);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -62,7 +66,7 @@ export default function CategoryManager({
           <div className="flex gap-2">
             <button
               type="button"
-              onClick={() => setType("despesa")}
+              onClick={() => { if (!pending) setType("despesa"); }}
               className={`rounded-lg px-3 py-2 text-sm ${
                 type === "despesa"
                   ? "bg-red-600 text-white"
@@ -73,7 +77,7 @@ export default function CategoryManager({
             </button>
             <button
               type="button"
-              onClick={() => setType("receita")}
+              onClick={() => { if (!pending) setType("receita"); }}
               className={`rounded-lg px-3 py-2 text-sm ${
                 type === "receita"
                   ? "bg-emerald-600 text-white"
@@ -88,16 +92,18 @@ export default function CategoryManager({
               name="name"
               required
               placeholder="Nome da categoria"
+              disabled={pending}
             />
             <div className="flex gap-2">
               {COLORS.map((c) => (
-                <label key={c} className="cursor-pointer">
+                <label key={c} className={`cursor-pointer ${pending ? "opacity-50 pointer-events-none" : ""}`}>
                   <input
                     type="radio"
                     name="color"
                     value={c}
                     defaultChecked={c === "#6366f1"}
                     className="sr-only peer"
+                    disabled={pending}
                   />
                   <div
                     className="h-8 w-8 rounded-full ring-offset-2 ring-offset-zinc-950 peer-checked:ring-2 peer-checked:ring-white"
@@ -118,6 +124,11 @@ export default function CategoryManager({
       </div>
 
       <div className="space-y-3">
+        {archiveError && (
+          <p className="rounded-lg bg-red-900/50 p-3 text-sm text-red-300">
+            {archiveError}
+          </p>
+        )}
         {categories.length === 0 ? (
           <p className="py-8 text-center text-sm text-zinc-500">
             Nenhuma categoria cadastrada. Crie uma acima.
@@ -156,10 +167,15 @@ export default function CategoryManager({
                       <DialogTitle>Editar Categoria</DialogTitle>
                     </DialogHeader>
                     <form
-                      action={async (formData) => {
+                      onSubmit={async (e) => {
+                        e.preventDefault();
+                        if (editPending) return;
+                        setEditPending(true);
+                        const formData = new FormData(e.currentTarget);
                         await updateCategory(cat.id, formData);
                         router.refresh();
                         setEditingId(null);
+                        setEditPending(false);
                       }}
                       className="space-y-4"
                     >
@@ -167,16 +183,18 @@ export default function CategoryManager({
                         name="name"
                         defaultValue={editName}
                         placeholder="Nome da categoria"
+                        disabled={editPending}
                       />
                       <div className="flex flex-wrap gap-2">
                         {COLORS.map((c) => (
-                          <label key={c} className="cursor-pointer">
+                          <label key={c} className={`cursor-pointer ${editPending ? "pointer-events-none opacity-50" : ""}`}>
                             <input
                               type="radio"
                               name="color"
                               value={c}
                               defaultChecked={c === editColor}
                               className="sr-only peer"
+                              disabled={editPending}
                             />
                             <div
                               className="h-8 w-8 rounded-full ring-offset-2 ring-offset-zinc-950 peer-checked:ring-2 peer-checked:ring-white"
@@ -188,9 +206,10 @@ export default function CategoryManager({
                       <div className="flex gap-2">
                         <button
                           type="submit"
-                          className="flex-1 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
+                          disabled={editPending}
+                          className="flex-1 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
                         >
-                          Salvar
+                          {editPending ? "Salvando..." : "Salvar"}
                         </button>
                         <DialogClose className="rounded-lg border border-zinc-700 px-4 py-2 text-sm text-zinc-400 hover:text-white">
                           Cancelar
@@ -200,9 +219,16 @@ export default function CategoryManager({
                   </DialogContent>
                 </Dialog>
                 <form
-                  action={async () => {
-                    await archiveCategory(cat.id);
-                    router.refresh();
+                  onSubmit={async (e) => {
+                    e.preventDefault();
+                    if (!confirm("Arquivar esta categoria?")) return;
+                    setArchiveError(null);
+                    const result = await archiveCategory(cat.id);
+                    if (result?.error) {
+                      setArchiveError(result.error);
+                    } else {
+                      router.refresh();
+                    }
                   }}
                 >
                   <button
@@ -218,6 +244,47 @@ export default function CategoryManager({
           ))
         )}
       </div>
+
+      {archivedCategories && archivedCategories.length > 0 && (
+        <details className="group rounded-xl border border-zinc-800">
+          <summary className="flex cursor-pointer items-center gap-2 px-5 py-3 text-sm text-zinc-500 transition-colors hover:text-zinc-300">
+            <Archive size={14} />
+            Categorias arquivadas ({archivedCategories.length})
+          </summary>
+          <div className="divide-y divide-zinc-800 border-t border-zinc-800">
+            {archivedCategories.map((cat) => (
+              <div
+                key={cat.id}
+                className="flex flex-wrap items-center justify-between gap-3 px-5 py-3"
+              >
+                <div className="flex min-w-0 flex-1 items-center gap-3">
+                  <div
+                    className="h-3 w-3 shrink-0 rounded-full opacity-50"
+                    style={{ backgroundColor: cat.color }}
+                  />
+                  <span className="truncate text-sm text-zinc-400">
+                    {cat.name}
+                  </span>
+                </div>
+                <form
+                  action={async () => {
+                    await restoreCategory(cat.id);
+                    router.refresh();
+                  }}
+                >
+                  <button
+                    type="submit"
+                    className="flex items-center gap-1 text-sm text-zinc-600 transition-colors hover:text-emerald-400"
+                  >
+                    <RotateCcw size={14} />
+                    <span className="hidden sm:inline">Restaurar</span>
+                  </button>
+                </form>
+              </div>
+            ))}
+          </div>
+        </details>
+      )}
     </div>
   );
 }
