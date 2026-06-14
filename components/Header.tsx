@@ -3,13 +3,15 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "@/actions/auth";
-import { LayoutDashboard, ArrowLeftRight, Wallet, Tags, LogOut } from "lucide-react";
+import { LayoutDashboard, ArrowLeftRight, Wallet, Tags, Upload, Settings, LogOut } from "lucide-react";
 
 const links = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/transactions", label: "Transações", icon: ArrowLeftRight },
   { href: "/accounts", label: "Contas", icon: Wallet },
   { href: "/categories", label: "Categorias", icon: Tags },
+  { href: "/import", label: "Importar", icon: Upload },
+  { href: "/settings", label: "Config", icon: Settings },
 ];
 
 export default function Header({ userName }: { userName?: string }) {

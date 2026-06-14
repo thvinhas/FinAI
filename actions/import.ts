@@ -1,0 +1,208 @@
+"use server"
+
+import { createClient } from "@/lib/supabase/server"
+import { revalidatePath } from "next/cache"
+import type { ParsedTransaction } from "@/types/import"
+import { extractFromPDFText } from "@/app/import/llm"
+
+export async function importTransactions(
+  accountId: string,
+  transactions: ParsedTransaction[],
+  force = false
+) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: "Não autenticado" }
+  if (!accountId) return { error: "Selecione uma conta" }
+  if (transactions.length === 0) return { error: "Nenhuma transação para importar" }
+
+  const { data: account } = await supabase
+    .from("accounts")
+    .select("balance")
+    .eq("id", accountId)
+    .single()
+
+  if (!account) return { error: "Conta não encontrada" }
+
+  const transfers = transactions.filter((t) => t.type === "transferencia")
+  const regular = transactions.filter((t) => t.type !== "transferencia")
+
+  const noCategory = regular.filter((t) => !t.category_id)
+  const withCategory = regular.filter((t) => t.category_id)
+
+  const validatesTransfers: ParsedTransaction[] = []
+  const invalidTransfers: ParsedTransaction[] = []
+  for (const t of transfers) {
+    const otherAccountId = t.destination_account_id || t.origin_account_id
+    if (otherAccountId) {
+      const { data: otherAcc } = await supabase
+        .from("accounts")
+        .select("id")
+        .eq("id", otherAccountId)
+        .single()
+      if (otherAcc) {
+        validatesTransfers.push(t)
+      } else {
+        invalidTransfers.push(t)
+      }
+    } else {
+      invalidTransfers.push(t)
+    }
+  }
+
+  const validRegular = force ? withCategory : withCategory
+
+  if (validRegular.length === 0 && validatesTransfers.length === 0) {
+    return {
+      error: "Nenhuma transação válida para importar.",
+      noCategory,
+      duplicates: [],
+      noDestiny: invalidTransfers,
+    }
+  }
+
+  const allDescs = [...validRegular, ...validatesTransfers].map((t) => t.description)
+  const { data: existing } = await supabase
+    .from("transactions")
+    .select("description, date")
+    .eq("account_id", accountId)
+    .in("description", allDescs)
+
+  const existingSet = new Set(
+    (existing ?? []).map((t) => `${t.description}|${t.date}`)
+  )
+
+  const toImportRegular = force
+    ? validRegular
+    : validRegular.filter((t) => !existingSet.has(`${t.description}|${t.date}`))
+
+  const toImportTransfers = force
+    ? validatesTransfers
+    : validatesTransfers.filter((t) => !existingSet.has(`${t.description}|${t.date}`))
+
+  const duplicates = [...validRegular, ...validatesTransfers].filter((t) =>
+    existingSet.has(`${t.description}|${t.date}`)
+  )
+
+  if (toImportRegular.length === 0 && toImportTransfers.length === 0) {
+    return {
+      error: "Todas as transações já estão cadastradas.",
+      noCategory,
+      duplicates,
+      noDestiny: invalidTransfers,
+    }
+  }
+
+  const regularDelta = toImportRegular.reduce(
+    (acc, t) => acc + (t.type === "receita" ? t.amount : -t.amount),
+    0
+  )
+
+  const allToImport = [
+    ...toImportRegular.map((t) => ({
+      user_id: user.id,
+      account_id: accountId,
+      category_id: t.category_id,
+      amount: t.amount,
+      type: t.type as string,
+      description: t.description,
+      date: t.date,
+    })),
+    ...toImportTransfers.map((t) => ({
+      user_id: user.id,
+      account_id: t.origin_account_id || accountId,
+      destination_account_id: t.destination_account_id || null,
+      amount: t.amount,
+      type: "transferencia",
+      description: t.description,
+      date: t.date,
+    })),
+  ]
+
+  const { error } = await supabase.from("transactions").insert(allToImport)
+
+  if (error) return { error: error.message, noCategory, duplicates, noDestiny: invalidTransfers }
+
+  if (regularDelta !== 0) {
+    await supabase
+      .from("accounts")
+      .update({ balance: Number(account.balance) + regularDelta })
+      .eq("id", accountId)
+  }
+
+  for (const t of toImportTransfers) {
+    if (t.destination_account_id) {
+      // Outgoing transfer: debit current, credit destination
+      const { data: srcAcc } = await supabase
+        .from("accounts")
+        .select("balance")
+        .eq("id", accountId)
+        .single()
+      if (srcAcc) {
+        await supabase
+          .from("accounts")
+          .update({ balance: Number(srcAcc.balance) - t.amount })
+          .eq("id", accountId)
+      }
+      const { data: dstAcc } = await supabase
+        .from("accounts")
+        .select("balance")
+        .eq("id", t.destination_account_id)
+        .single()
+      if (dstAcc) {
+        await supabase
+          .from("accounts")
+          .update({ balance: Number(dstAcc.balance) + t.amount })
+          .eq("id", t.destination_account_id)
+      }
+    } else if (t.origin_account_id) {
+      // Incoming transfer: debit origin, credit current
+      const { data: srcAcc } = await supabase
+        .from("accounts")
+        .select("balance")
+        .eq("id", t.origin_account_id)
+        .single()
+      if (srcAcc) {
+        await supabase
+          .from("accounts")
+          .update({ balance: Number(srcAcc.balance) - t.amount })
+          .eq("id", t.origin_account_id)
+      }
+      const { data: dstAcc } = await supabase
+        .from("accounts")
+        .select("balance")
+        .eq("id", accountId)
+        .single()
+      if (dstAcc) {
+        await supabase
+          .from("accounts")
+          .update({ balance: Number(dstAcc.balance) + t.amount })
+          .eq("id", accountId)
+      }
+    }
+  }
+
+  revalidatePath("/transactions")
+  revalidatePath("/dashboard")
+  revalidatePath("/accounts")
+
+  if (noCategory.length > 0 || duplicates.length > 0 || invalidTransfers.length > 0) {
+    return { imported: toImportRegular.length + toImportTransfers.length, noCategory, duplicates, noDestiny: invalidTransfers }
+  }
+}
+
+export async function parsePDFWithLLM(
+  text: string,
+  categories: { id: string; name: string }[] = [],
+  ignoreKeywords: string[] = []
+) {
+  if (!text.trim()) return { error: "Texto vazio" }
+  if (text.length > 50000) {
+    return { error: `Texto muito longo (${text.length} caracteres). O máximo suportado é 50.000 caracteres. Tente enviar um PDF com menos páginas.` }
+  }
+  console.log("[parsePDFWithLLM] Text length:", text.length)
+  const result = await extractFromPDFText(text, categories)
+  console.log("[parsePDFWithLLM] Result:", JSON.stringify(result, null, 2))
+  if (result.error) return { error: result.error }
+  return { transactions: result.transactions, suggested_ignore_keywords: result.suggested_ignore_keywords }
+}
