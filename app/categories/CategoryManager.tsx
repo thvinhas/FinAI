@@ -2,8 +2,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { createCategory, archiveCategory, restoreCategory, updateCategory } from "@/actions/categories";
-import { Archive, Pencil, RotateCcw } from "lucide-react";
+import { createCategory, archiveCategory, restoreCategory, updateCategory, seedDefaultCategories } from "@/actions/categories";
+import { Archive, Pencil, RotateCcw, Sparkles } from "lucide-react";
 import Input from "@/components/Input";
 import {
   Dialog,
@@ -130,9 +130,24 @@ export default function CategoryManager({
           </p>
         )}
         {categories.length === 0 ? (
-          <p className="py-8 text-center text-sm text-zinc-500">
-            Nenhuma categoria cadastrada. Crie uma acima.
-          </p>
+          <div className="py-8 text-center">
+            <p className="mb-4 text-sm text-zinc-500">
+              Nenhuma categoria cadastrada.
+            </p>
+            <button
+              type="button"
+              onClick={async () => {
+                setError("")
+                const result = await seedDefaultCategories()
+                if (result?.error) setError(result.error)
+                else router.refresh()
+              }}
+              className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 transition-colors"
+            >
+              <Sparkles size={16} />
+              Adicionar categorias padrão
+            </button>
+          </div>
         ) : (
           categories.map((cat) => (
             <div
