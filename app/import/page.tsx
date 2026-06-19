@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server"
 import { redirect } from "next/navigation"
+import Header from "@/components/Header"
 import { buildKeywordMap } from "./categorizer"
 import ImportForm from "./ImportForm"
 import type { Category, Account } from "@/types/database"
@@ -54,7 +55,9 @@ export default async function ImportPage() {
   }))
 
   return (
-    <div className="mx-auto max-w-5xl px-4 py-8">
+    <>
+      <Header userName={user?.email} />
+      <div className="mx-auto max-w-5xl px-4 py-8">
       <h1 className="mb-8 text-2xl font-bold text-white">
         Importar Transações
       </h1>
@@ -66,5 +69,6 @@ export default async function ImportPage() {
         initialTransferMappings={initialTransferMappings}
       />
     </div>
+    </>
   )
 }
