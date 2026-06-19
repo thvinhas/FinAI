@@ -123,6 +123,11 @@ export async function createTransaction(formData: FormData) {
   const amount = parseFloat(formData.get("amount") as string);
   const type = formData.get("type") as string;
   const accountId = formData.get("account_id") as string;
+  const categoryId = formData.get("category_id") as string;
+
+  if ((type === "receita" || type === "despesa") && !categoryId) {
+    return { error: "Categoria é obrigatória para receitas e despesas" };
+  }
 
   const { error } = await supabase.from("transactions").insert({
     user_id: user.id,
@@ -172,6 +177,11 @@ export async function updateTransaction(id: string, formData: FormData) {
   const amount = parseFloat(formData.get("amount") as string);
   const accountId = formData.get("account_id") as string;
   const type = formData.get("type") as string;
+  const categoryId = formData.get("category_id") as string;
+
+  if ((type === "receita" || type === "despesa") && !categoryId) {
+    return { error: "Categoria é obrigatória para receitas e despesas" };
+  }
 
   const { error } = await supabase
     .from("transactions")
@@ -339,4 +349,39 @@ export async function getDashboardData(year: number, month: number) {
     monthlyData: { receita: receitas, despesa: despesas, saldo: economiaValue, label: monthLabel },
     economia: { value: economiaValue, pct: economiaPct },
   };
+}
+
+export async function suggestCategory(
+  description: string
+): Promise<string | null> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user || !description.trim()) return null;
+
+  const { data } = await supabase
+    .from("transactions")
+    .select("category_id")
+    .ilike("description", `%${description}%`)
+    .not("category_id", "is", null)
+    .limit(20);
+
+  if (!data || data.length === 0) return null;
+
+  const freq: Record<string, number> = {};
+  for (const t of data) {
+    freq[t.category_id] = (freq[t.category_id] || 0) + 1;
+  }
+
+  let bestId: string | null = null;
+  let bestCount = 0;
+  for (const [id, count] of Object.entries(freq)) {
+    if (count > bestCount) {
+      bestCount = count;
+      bestId = id;
+    }
+  }
+
+  return bestId;
 }

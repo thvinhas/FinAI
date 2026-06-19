@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { createTransaction, createTransfer } from "@/actions/transactions";
+import { createTransaction, createTransfer, suggestCategory } from "@/actions/transactions";
 import Input from "@/components/Input";
 import SearchSelect from "@/components/SearchSelect";
 import CurrencyInput from "@/components/CurrencyInput";
@@ -26,6 +26,8 @@ export default function TransactionForm({
   );
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
+  const [description, setDescription] = useState(initialData?.description ?? "");
+  const [categoryId, setCategoryId] = useState(initialData?.category_id ?? "");
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -35,6 +37,10 @@ export default function TransactionForm({
 
     const formData = new FormData(e.currentTarget);
     const formType = formData.get("type") as FormType;
+
+    if (formType !== "transferencia") {
+      formData.set("category_id", categoryId);
+    }
 
     const result =
       initialData
@@ -51,6 +57,15 @@ export default function TransactionForm({
     );
     setPending(false);
   }
+
+  useEffect(() => {
+    if (!description.trim()) return;
+    const timer = setTimeout(async () => {
+      const suggested = await suggestCategory(description);
+      if (suggested) setCategoryId(suggested);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [description]);
 
   const filteredCategories = categories.filter((c) => c.type === type);
 
@@ -168,7 +183,10 @@ export default function TransactionForm({
               name="description"
               required
               placeholder="Ex: Salário, Supermercado..."
-              defaultValue={initialData?.description ?? ""}
+              value={description}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                setDescription(e.target.value)
+              }
             />
           </div>
           <div>
@@ -190,22 +208,25 @@ export default function TransactionForm({
           </div>
           <div>
             <label className="mb-1.5 block text-sm font-medium text-zinc-400">
-              Categoria
+              Categoria <span className="text-red-400">*</span>
             </label>
             <SearchSelect
               key={type}
               name="category_id"
-              placeholder="Sem categoria"
+              value={categoryId}
+              onChange={setCategoryId}
+              required
+              placeholder="Selecione uma categoria"
               searchPlaceholder="Buscar categoria..."
-              defaultValue={initialData?.category_id ?? ""}
-              options={[
-                { value: "", label: "Sem categoria" },
-                ...filteredCategories.map((c) => ({
-                  value: c.id,
-                  label: c.name,
-                  color: c.color,
-                })),
-              ]}
+              options={
+                filteredCategories.length > 0
+                  ? filteredCategories.map((c) => ({
+                      value: c.id,
+                      label: c.name,
+                      color: c.color,
+                    }))
+                  : [{ value: "", label: "Nenhuma categoria disponível" }]
+              }
             />
           </div>
           <div>

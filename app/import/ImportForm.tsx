@@ -1,0 +1,640 @@
+"use client"
+
+import { useState, useRef, useCallback, useEffect } from "react"
+import { useRouter } from "next/navigation"
+import {
+  Upload,
+  FileText,
+  AlertCircle,
+  Check,
+  Loader2,
+  X,
+} from "lucide-react"
+import { applyKeywordMap } from "./categorizer"
+import Papa from "papaparse"
+import { detectFormat, parseCSV, parseOFX, detectCSVHeaders, autoDetectMapping, filterGarbage, extractGarbageKeywords, parseDate, parseBRL } from "./parser"
+import KeywordManager from "./KeywordManager"
+import IgnoreKeywordManager from "./IgnoreKeywordManager"
+import ImportPreview from "./ImportPreview"
+import { importTransactions, parsePDFWithLLM } from "@/actions/import"
+import { addIgnoreKeyword } from "@/actions/import-ignore-keywords"
+import { getTransferMappings, saveTransferMapping } from "@/actions/import-transfer-mappings"
+import type { ParsedTransaction, TransferMapping } from "@/types/import"
+import type { Account, Category } from "@/types/database"
+import type { SelectOption } from "@/components/SearchSelect"
+import SearchSelect from "@/components/SearchSelect"
+
+type Step = "upload" | "preview"
+
+export default function ImportForm({
+  accounts,
+  categories,
+  keywordMap,
+  initialIgnoreKeywords,
+  initialTransferMappings = [],
+}: {
+  accounts: Account[]
+  categories: Category[]
+  keywordMap: Record<string, string>
+  initialIgnoreKeywords?: string[]
+  initialTransferMappings?: TransferMapping[]
+}) {
+  const router = useRouter()
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  const [step, setStep] = useState<Step>("upload")
+  const [fileName, setFileName] = useState("")
+  const [rawText, setRawText] = useState("")
+
+  const [transactions, setTransactions] = useState<ParsedTransaction[]>([])
+  const [parsing, setParsing] = useState(false)
+  const [error, setError] = useState("")
+
+  // Import
+  const [accountId, setAccountId] = useState("")
+  const [importing, setImporting] = useState(false)
+  const [pendingDuplicates, setPendingDuplicates] = useState<ParsedTransaction[] | null>(null)
+
+  // Transfer keywords
+  const [transferKeywords, setTransferKeywords] = useState<string[]>([])
+
+  // Ignore keywords
+  const [ignoreKeywords, setIgnoreKeywords] = useState<string[]>(initialIgnoreKeywords ?? [])
+  const [suggestedKeywords, setSuggestedKeywords] = useState<string[]>([])
+
+  // LLM processing
+  const [processingLLM, setProcessingLLM] = useState(false)
+  const [extractingPDF, setExtractingPDF] = useState(false)
+
+  // Transfer mappings
+  const [transferMappings, setTransferMappings] = useState<TransferMapping[]>(initialTransferMappings)
+
+  useEffect(() => {
+    getTransferMappings().then(setTransferMappings)
+  }, [])
+
+  const handleFile = useCallback(async (file: File) => {
+    setError("")
+    setParsing(true)
+    setFileName(file.name)
+
+    try {
+      let text: string
+      if (file.name.toLowerCase().endsWith(".pdf")) {
+        setExtractingPDF(true)
+        try {
+          text = await extractPDFTextClient(file)
+          setExtractingPDF(false)
+        } catch (e) {
+          setExtractingPDF(false)
+          setError(e instanceof Error ? e.message : "Erro ao processar PDF")
+          setParsing(false)
+          return
+        }
+      } else {
+        text = await file.text()
+      }
+      setRawText(text.substring(0, 20000))
+      setParsing(false)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Erro ao processar arquivo")
+      setParsing(false)
+    }
+  }, [])
+
+  function applyCategories(txns: ParsedTransaction[]) {
+    const withCats = txns.map((t) => {
+      // Apply transfer mappings
+      const mapping = transferMappings.find(
+        (m) => t.description.toLowerCase().includes(m.description.toLowerCase())
+      )
+      if (mapping) {
+        return {
+          ...t,
+          type: "transferencia" as const,
+          category_id: null,
+          destination_account_id: mapping.transfer_type === "destination" ? mapping.account_id : null,
+          origin_account_id: mapping.transfer_type === "origin" ? mapping.account_id : null,
+        }
+      }
+      return {
+        ...t,
+        destination_account_id: t.type !== "transferencia" ? null : t.destination_account_id ?? null,
+        origin_account_id: t.type !== "transferencia" ? null : t.origin_account_id ?? null,
+        category_id: t.type === "transferencia" ? null : (applyKeywordMap(t.description, keywordMap) ?? t.category_id),
+      }
+    })
+    setTransactions(withCats)
+    setProcessingLLM(false)
+    setStep("preview")
+  }
+
+  async function handleLLMProcess() {
+    if (!rawText.trim()) return
+    setProcessingLLM(true)
+    setError("")
+    const catList = categories.map((c) => ({ id: c.id, name: c.name }))
+    console.log("[LLM Process] Ignore keywords:", ignoreKeywords)
+    const result = await parsePDFWithLLM(rawText, catList, ignoreKeywords)
+    console.log("[LLM Process] Result:", JSON.stringify(result, null, 2))
+    if (result?.error) {
+      setError(result.error)
+      setProcessingLLM(false)
+      return
+    }
+    if (result?.transactions && result.transactions.length > 0) {
+      const filtered = filterGarbage(result.transactions, ignoreKeywords)
+      if (filtered.length > 0) {
+        applyCategories(filtered)
+      } else {
+        setError("Todas as transações foram filtradas como lixo. Reveja as palavras-chave de ignorar nas configurações.")
+        setProcessingLLM(false)
+      }
+      return
+    }
+
+    // Fallback: try traditional parser for CSV/OFX
+    const fmt = detectFormat(fileName, rawText)
+    if (fmt === "ofx") {
+      const raw = parseOFX(rawText, transferKeywords)
+      const suggestions = extractGarbageKeywords(raw, ignoreKeywords)
+      setSuggestedKeywords(suggestions)
+      const txns = filterGarbage(raw, ignoreKeywords)
+      if (txns.length > 0) {
+        applyCategories(txns)
+        return
+      }
+    } else {
+      const headers = detectCSVHeaders(rawText)
+      const autoMap = autoDetectMapping(headers)
+      // Try auto-detected mapping first
+      if (autoMap) {
+        const raw = parseCSV(rawText, autoMap, transferKeywords)
+        const suggestions = extractGarbageKeywords(raw, ignoreKeywords)
+        setSuggestedKeywords(suggestions)
+        const txns = filterGarbage(raw, ignoreKeywords)
+        if (txns.length > 0) {
+          applyCategories(txns)
+          return
+        }
+      }
+      // Try with default column positions (date=0, description=1, amount=2)
+      if (headers.length >= 3) {
+        const defaultMap = { date: 0, description: 1, amount: 2, type: null }
+        const raw = parseCSV(rawText, defaultMap, transferKeywords)
+        const txns = filterGarbage(raw, ignoreKeywords)
+        if (txns.length > 0) {
+          applyCategories(txns)
+          return
+        }
+      }
+      // Last resort: parse without header row (each row is [date, desc, amount])
+      const parsed = Papa.parse(rawText, { header: false, skipEmptyLines: true })
+      const rows = parsed.data as string[][]
+      if (rows.length > 0) {
+        const txns = rows
+          .map((row) => {
+            const date = parseDate(row[0] ?? "")
+            const description = (row[1] ?? "").trim()
+            const amount = parseBRL(row[2] ?? "")
+            if (!date || !description || !amount) return null
+            return {
+              date,
+              description,
+              amount: Math.abs(amount),
+              type: (amount >= 0 ? "receita" : "despesa") as ParsedTransaction["type"],
+              category_id: null,
+              destination_account_id: null,
+            }
+          })
+          .filter((t) => t !== null) as ParsedTransaction[]
+        if (txns.length > 0) {
+          applyCategories(txns)
+          return
+        }
+      }
+    }
+
+    setError("Nenhuma transação encontrada. Verifique se o texto contém dados de extrato bancário.")
+    setProcessingLLM(false)
+  }
+
+  function updateTransaction(index: number, updates: Partial<ParsedTransaction>) {
+    setTransactions((prev) => {
+      const updated = prev.map((t, i) => (i === index ? { ...t, ...updates } : t))
+      const tx = updated[index]
+      if (
+        tx.type === "transferencia" &&
+        (tx.destination_account_id || tx.origin_account_id)
+      ) {
+        const accountId = tx.destination_account_id || tx.origin_account_id
+        if (accountId) {
+          const transferType = tx.destination_account_id ? "destination" as const : "origin" as const
+          saveTransferMapping(tx.description, transferType, accountId).then(() => {
+            getTransferMappings().then(setTransferMappings)
+          })
+        }
+      }
+      return updated
+    })
+  }
+
+  function removeTransaction(index: number) {
+    setTransactions((prev) => prev.filter((_, i) => i !== index))
+  }
+
+  function validateTransfers(): string | null {
+    const transfersNoAccount = transactions.filter(
+      (t) => t.type === "transferencia" && !t.destination_account_id && !t.origin_account_id
+    )
+    if (transfersNoAccount.length > 0) {
+      const descs = transfersNoAccount.slice(0, 3).map((t) => t.description).join('", "')
+      return `${transfersNoAccount.length} transferência(s) sem conta: "${descs}${transfersNoAccount.length > 3 ? `" e mais ${transfersNoAccount.length - 3}` : ""}". Selecione a conta de origem ou destino para cada uma.`
+    }
+    return null
+  }
+
+  async function handleImport() {
+    if (!accountId || transactions.length === 0) return
+    const transferErr = validateTransfers()
+    if (transferErr) { setError(transferErr); return }
+    setImporting(true)
+    setError("")
+    const result = await importTransactions(accountId, transactions)
+    if (result?.duplicates?.length && !pendingDuplicates) {
+      setPendingDuplicates(result.duplicates)
+      const msg = result.noCategory?.length
+        ? `${result.noCategory.length} pendente(s) sem categoria. ${result.duplicates.length} duplicata(s) encontrada(s). Resolva abaixo.`
+        : `${result.duplicates.length} transação(ões) duplicada(s) encontrada(s). Deseja importá-la(s) mesmo assim?`
+      setError(msg)
+      setImporting(false)
+      return
+    }
+    if (result?.noDestiny?.length) {
+      setTransactions((prev) =>
+        prev.filter((t) =>
+          !result.noDestiny!.some((d: ParsedTransaction) => d.date === t.date && d.description === t.description)
+        )
+      )
+      setError(result.error ?? `${result.imported} importada(s), ${result.noDestiny.length} transferência(s) com destino inválido removidas.`)
+      setImporting(false)
+      return
+    }
+    if (result?.noCategory?.length) {
+      setTransactions(result.noCategory)
+      setError(result.error ?? `${result.imported} importada(s), ${result.noCategory.length} pendente(s) sem categoria.`)
+      setImporting(false)
+      return
+    }
+    if (result?.error) {
+      setError(result.error)
+      setImporting(false)
+      return
+    }
+    router.push(
+      `/transactions?success=${result?.imported ?? transactions.length}+transações+importadas`
+    )
+  }
+
+  async function handleForceImport() {
+    setPendingDuplicates(null)
+    setError("")
+    setImporting(true)
+    const transferErr = validateTransfers()
+    if (transferErr) { setError(transferErr); setImporting(false); return }
+    const result = await importTransactions(accountId, transactions, true)
+    if (result?.noDestiny?.length) {
+      setTransactions((prev) =>
+        prev.filter((t) =>
+          !result.noDestiny!.some((d: ParsedTransaction) => d.date === t.date && d.description === t.description)
+        )
+      )
+      setError(result.error ?? `${result.imported} importada(s), ${result.noDestiny.length} transferência(s) com destino inválido removidas.`)
+      setImporting(false)
+      return
+    }
+    if (result?.noCategory?.length) {
+      setTransactions(result.noCategory)
+      setError(result.error ?? `${result.imported} importada(s), ${result.noCategory.length} pendente(s) sem categoria.`)
+      setImporting(false)
+      return
+    }
+    if (result?.error) {
+      setError(result.error)
+      setImporting(false)
+      return
+    }
+    router.push(
+      `/transactions?success=${result?.imported ?? transactions.length}+transações+importadas`
+    )
+  }
+
+  function handleSkipDuplicates() {
+    setPendingDuplicates(null)
+    const dupKeys = new Set(pendingDuplicates?.map((d) => `${d.date}|${d.description}`) ?? [])
+    setTransactions((prev) => prev.filter((t) => !dupKeys.has(`${t.date}|${t.description}`)))
+  }
+
+  // ── Step: Upload ──────────────────────────────────────────────
+  if (step === "upload") {
+    return (
+      <div className="space-y-6">
+        <KeywordManager onKeywordsChange={setTransferKeywords} />
+        <IgnoreKeywordManager onKeywordsChange={setIgnoreKeywords} />
+        <UploadZone
+          inputRef={inputRef}
+          parsing={parsing || extractingPDF}
+          error={error}
+          onFile={handleFile}
+        />
+
+        {rawText && !parsing && !extractingPDF && (
+          <div className="space-y-4 rounded-xl border border-zinc-800 bg-zinc-900/50 p-6">
+            <h3 className="text-sm font-medium text-white">
+              Texto extraído — {fileName}
+            </h3>
+            <p className="text-xs text-zinc-500">
+              Revise o texto extraído do arquivo e clique em "Processar com IA"
+              para extrair as transações.
+            </p>
+            <textarea
+              value={rawText}
+              onChange={(e) => setRawText(e.target.value)}
+              rows={10}
+              className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-300 outline-none focus:border-indigo-500"
+            />
+            <button
+              onClick={handleLLMProcess}
+              disabled={processingLLM || !rawText.trim()}
+              className="flex items-center gap-2 rounded-lg bg-indigo-600 px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {processingLLM ? (
+                <Loader2 size={16} className="animate-spin" />
+              ) : (
+                <FileText size={16} />
+              )}
+              {processingLLM ? "Processando..." : "Processar com IA"}
+            </button>
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  // ── Step: Preview ────────────────────────────────────────────
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <FileText size={20} className="text-indigo-400" />
+          <div>
+            <p className="text-sm font-medium text-white">{fileName}</p>
+            <p className="text-xs text-zinc-500">
+              {transactions.length} transação
+              {transactions.length !== 1 ? "ões" : ""} encontrada
+              {transactions.length !== 1 ? "s" : ""}
+            </p>
+          </div>
+        </div>
+        <button
+          onClick={() => {
+            setStep("upload")
+            setRawText("")
+          }}
+          className="text-sm text-zinc-500 hover:text-white"
+        >
+          Trocar arquivo
+        </button>
+      </div>
+
+      <div>
+        <label className="mb-1.5 block text-sm font-medium text-zinc-400">
+          Conta de destino
+        </label>
+        <SearchSelect
+          placeholder="Selecione uma conta"
+          searchPlaceholder="Buscar conta..."
+          value={accountId}
+          onChange={setAccountId}
+          options={
+            [
+              { value: "", label: "Selecione uma conta" },
+              ...accounts.map((a) => ({
+                value: a.id,
+                label: `${a.name} (R$ ${Number(a.balance).toFixed(2)})`,
+                color: a.color,
+              })),
+            ] as SelectOption[]
+          }
+        />
+      </div>
+
+      {error && (
+        <div className="flex items-center gap-2 rounded-lg bg-red-900/50 px-4 py-2 text-sm text-red-300">
+          <AlertCircle size={16} />
+          {error}
+        </div>
+      )}
+
+      {suggestedKeywords.length > 0 && (
+        <div className="rounded-xl border border-indigo-800 bg-indigo-900/20 p-4 text-sm">
+          <p className="mb-3 font-medium text-indigo-300">
+            Palavras sugeridas para ignorar
+          </p>
+          <p className="mb-3 text-indigo-200/70">
+            A IA identificou palavras que aparecem em linhas de resumo/lixo.
+            Adicione-as para filtrar automaticamente em futuras importações.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {suggestedKeywords.map((kw) => (
+              <span
+                key={kw}
+                className="flex items-center gap-2 rounded-full bg-indigo-900/50 px-3 py-1.5 text-xs text-indigo-200"
+              >
+                {kw}
+                <button
+                  type="button"
+                  onClick={async () => {
+                    await addIgnoreKeyword(kw)
+                    setIgnoreKeywords((prev) => [...prev, kw].sort())
+                    setSuggestedKeywords((prev) => prev.filter((k) => k !== kw))
+                  }}
+                  className="rounded bg-indigo-600 px-2 py-0.5 text-xs text-white hover:bg-indigo-500 transition-colors"
+                >
+                  Adicionar
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setSuggestedKeywords((prev) => prev.filter((k) => k !== kw))
+                  }
+                  className="text-indigo-400 hover:text-white transition-colors"
+                >
+                  <X size={12} />
+                </button>
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {pendingDuplicates && (
+        <div className="rounded-xl border border-amber-800 bg-amber-900/30 p-4 text-sm">
+          <p className="mb-3 font-medium text-amber-300">
+            {pendingDuplicates.length} transação(ões) duplicada(s) encontrada(s)
+          </p>
+          <p className="mb-4 text-amber-200/70">
+            Essas transações já existem na conta selecionada com a mesma data e
+            descrição. O que deseja fazer?
+          </p>
+          <div className="flex gap-3">
+            <button
+              onClick={handleForceImport}
+              disabled={importing}
+              className="rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-amber-700 disabled:opacity-50"
+            >
+              {importing ? "Importando..." : "Importar mesmo assim"}
+            </button>
+            <button
+              onClick={handleSkipDuplicates}
+              disabled={importing}
+              className="rounded-lg border border-zinc-700 px-4 py-2 text-sm text-zinc-400 transition-colors hover:text-white disabled:opacity-50"
+            >
+              Pular duplicatas
+            </button>
+          </div>
+        </div>
+      )}
+
+      <ImportPreview
+        transactions={transactions}
+        categories={categories}
+        accounts={accounts}
+        accountId={accountId}
+        onUpdate={updateTransaction}
+        onRemove={removeTransaction}
+      />
+
+      <div className="sticky bottom-4 flex items-center justify-between rounded-xl border border-zinc-800 bg-zinc-900 p-4">
+        <div>
+          <p className="text-sm text-zinc-400">
+            {transactions.length} transação
+            {transactions.length !== 1 ? "ões" : ""}
+            {accountId &&
+              ` → ${accounts.find((a) => a.id === accountId)?.name ?? ""}`}
+          </p>
+          {!accountId && (
+            <p className="text-xs text-zinc-600">
+              Selecione uma conta para importar
+            </p>
+          )}
+        </div>
+        <button
+          onClick={handleImport}
+          disabled={
+            !accountId || transactions.length === 0 || importing
+          }
+          className="flex items-center gap-2 rounded-lg bg-indigo-600 px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {importing ? (
+            <Loader2 size={16} className="animate-spin" />
+          ) : (
+            <Check size={16} />
+          )}
+          {importing
+            ? "Importando..."
+            : `Importar ${transactions.length}`}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ── Sub-components ────────────────────────────────────────────
+
+function UploadZone({
+  inputRef,
+  parsing,
+  error,
+  onFile,
+}: {
+  inputRef: React.RefObject<HTMLInputElement | null>
+  parsing: boolean
+  error: string
+  onFile: (file: File) => void
+}) {
+  return (
+    <div
+      onClick={() => inputRef.current?.click()}
+      onDragOver={(e) => {
+        e.preventDefault()
+        e.currentTarget.classList.add("border-indigo-500")
+      }}
+      onDragLeave={(e) => {
+        e.currentTarget.classList.remove("border-indigo-500")
+      }}
+      onDrop={(e) => {
+        e.preventDefault()
+        e.currentTarget.classList.remove("border-indigo-500")
+        const file = e.dataTransfer.files[0]
+        if (file) onFile(file)
+      }}
+      className="flex cursor-pointer flex-col items-center justify-center gap-4 rounded-xl border-2 border-dashed border-zinc-700 bg-zinc-900/50 p-16 transition-colors hover:border-zinc-500"
+    >
+      <input
+        ref={inputRef}
+        type="file"
+        accept=".csv,.ofx,.qfx,.pdf"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0]
+          if (file) onFile(file)
+        }}
+      />
+      {parsing ? (
+        <Loader2 size={40} className="animate-spin text-indigo-400" />
+      ) : (
+        <>
+          <Upload size={40} className="text-zinc-500" />
+          <div className="text-center">
+            <p className="text-lg font-medium text-zinc-300">
+              Solte o arquivo aqui ou clique para selecionar
+            </p>
+            <p className="mt-1 text-sm text-zinc-500">
+              Suporta CSV, OFX, QFX e PDF
+            </p>
+          </div>
+        </>
+      )}
+      {error && (
+        <div className="flex items-center gap-2 rounded-lg bg-red-900/50 px-4 py-2 text-sm text-red-300">
+          <AlertCircle size={16} />
+          {error}
+        </div>
+      )}
+    </div>
+  )
+}
+
+async function extractPDFTextClient(file: File): Promise<string> {
+  const pdfjs = await import("pdfjs-dist")
+  pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`
+
+  const buffer = await file.arrayBuffer()
+  const pdf = await pdfjs.getDocument({ data: buffer }).promise
+
+  let text = ""
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i)
+    const content = await page.getTextContent()
+    text += content.items.map((item: any) => item.str).join(" ") + "\n"
+  }
+
+  if (!text.trim()) {
+    throw new Error("Não foi possível extrair texto do PDF. O PDF pode conter apenas imagens.")
+  }
+
+  return text.substring(0, 20000)
+}
+
+
