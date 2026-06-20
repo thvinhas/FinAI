@@ -1,8 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { signInWithEmail, signUp, signInWithGoogle } from "@/actions/auth";
+import { signInWithEmail, signUp } from "@/actions/auth";
+import { createClient } from "@/lib/supabase/browser";
 import Input from "@/components/Input";
+
+const supabase = createClient();
 
 export function LoginForm() {
   const [error, setError] = useState("");
@@ -80,16 +83,16 @@ export function LoginForm() {
       <button
         type="button"
         onClick={async () => {
-          console.log("[Google Login] clicou")
           setPending(true)
           setError("")
-          const result = await signInWithGoogle()
-          console.log("[Google Login] result:", result)
-          if (result?.url) {
-            console.log("[Google Login] redirecionando para:", result.url)
-            window.location.href = result.url
-          } else {
-            setError(result?.error || "Erro ao conectar com Google")
+          const { error } = await supabase.auth.signInWithOAuth({
+            provider: "google",
+            options: {
+              redirectTo: window.location.origin + "/auth/callback",
+            },
+          })
+          if (error) {
+            setError(error.message)
             setPending(false)
           }
         }}
