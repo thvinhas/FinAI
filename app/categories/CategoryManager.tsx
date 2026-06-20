@@ -18,7 +18,10 @@ import type { Category } from "@/types/database";
 const COLORS = [
   "#6366f1", "#10b981", "#f59e0b", "#ef4444",
   "#3b82f6", "#ec4899", "#8b5cf6", "#14b8a6",
-  "#f97316", "#06b6d4",
+  "#f97316", "#06b6d4", "#22c55e", "#a855f7",
+  "#e11d48", "#0ea5e9", "#d946ef", "#84cc16",
+  "#f43f5e", "#64748b", "#fb923c", "#2dd4bf",
+  "#eab308", "#475569", "#a78bfa", "#34d399",
 ];
 
 export default function CategoryManager({
@@ -94,7 +97,7 @@ export default function CategoryManager({
               placeholder="Nome da categoria"
               disabled={pending}
             />
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               {COLORS.map((c) => (
                 <label key={c} className={`cursor-pointer ${pending ? "opacity-50 pointer-events-none" : ""}`}>
                   <input
@@ -149,114 +152,126 @@ export default function CategoryManager({
             </button>
           </div>
         ) : (
-          categories.map((cat) => (
-            <div
-              key={cat.id}
-              className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-zinc-800 bg-zinc-900/50 px-5 py-4"
-            >
-              <div className="flex min-w-0 flex-1 items-center gap-3">
-                <div
-                  className="h-4 w-4 shrink-0 rounded-full"
-                  style={{ backgroundColor: cat.color }}
-                />
-                <span className="truncate text-white">{cat.name}</span>
-                <span className="shrink-0 rounded-full bg-zinc-800 px-2 py-0.5 text-xs text-zinc-400">
-                  {cat.type}
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Dialog>
-                  <DialogTrigger
-                    onClick={() => {
-                      setEditingId(cat.id);
-                      setEditName(cat.name);
-                      setEditColor(cat.color);
-                    }}
-                    className="flex items-center gap-1 text-sm text-zinc-600 transition-colors hover:text-indigo-400"
-                  >
-                    <Pencil size={14} />
-                    <span className="hidden sm:inline">Editar</span>
-                  </DialogTrigger>
-                  <DialogContent>
-                    <DialogHeader>
-                      <DialogTitle>Editar Categoria</DialogTitle>
-                    </DialogHeader>
-                    <form
-                      onSubmit={async (e) => {
-                        e.preventDefault();
-                        if (editPending) return;
-                        setEditPending(true);
-                        const formData = new FormData(e.currentTarget);
-                        await updateCategory(cat.id, formData);
-                        router.refresh();
-                        setEditingId(null);
-                        setEditPending(false);
-                      }}
-                      className="space-y-4"
-                    >
-                      <Input
-                        name="name"
-                        defaultValue={editName}
-                        placeholder="Nome da categoria"
-                        disabled={editPending}
-                      />
-                      <div className="flex flex-wrap gap-2">
-                        {COLORS.map((c) => (
-                          <label key={c} className={`cursor-pointer ${editPending ? "pointer-events-none opacity-50" : ""}`}>
-                            <input
-                              type="radio"
-                              name="color"
-                              value={c}
-                              defaultChecked={c === editColor}
-                              className="sr-only peer"
-                              disabled={editPending}
-                            />
-                            <div
-                              className="h-8 w-8 rounded-full ring-offset-2 ring-offset-zinc-950 peer-checked:ring-2 peer-checked:ring-white"
-                              style={{ backgroundColor: c }}
-                            />
-                          </label>
-                        ))}
+          <>
+            {["receita", "despesa"].map((typeFilter) => {
+              const filtered = categories.filter((c) => c.type === typeFilter)
+              if (filtered.length === 0) return null
+              return (
+                <div key={typeFilter}>
+                  <h3 className={`mb-3 text-sm font-medium ${typeFilter === "receita" ? "text-emerald-400" : "text-red-400"}`}>
+                    {typeFilter === "receita" ? "Receitas" : "Despesas"}
+                  </h3>
+                  <div className="space-y-3">
+                    {filtered.map((cat) => (
+                      <div
+                        key={cat.id}
+                        className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-zinc-800 bg-zinc-900/50 px-5 py-4"
+                      >
+                        <div className="flex min-w-0 flex-1 items-center gap-3">
+                          <div
+                            className="h-4 w-4 shrink-0 rounded-full"
+                            style={{ backgroundColor: cat.color }}
+                          />
+                          <span className="truncate text-white">{cat.name}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Dialog>
+                            <DialogTrigger
+                              onClick={() => {
+                                setEditingId(cat.id);
+                                setEditName(cat.name);
+                                setEditColor(cat.color);
+                              }}
+                              className="flex items-center gap-1 text-sm text-zinc-600 transition-colors hover:text-indigo-400"
+                            >
+                              <Pencil size={14} />
+                              <span className="hidden sm:inline">Editar</span>
+                            </DialogTrigger>
+                            <DialogContent>
+                              <DialogHeader>
+                                <DialogTitle>Editar Categoria</DialogTitle>
+                              </DialogHeader>
+                              <form
+                                onSubmit={async (e) => {
+                                  e.preventDefault();
+                                  if (editPending) return;
+                                  setEditPending(true);
+                                  const formData = new FormData(e.currentTarget);
+                                  await updateCategory(cat.id, formData);
+                                  router.refresh();
+                                  setEditingId(null);
+                                  setEditPending(false);
+                                }}
+                                className="space-y-4"
+                              >
+                                <Input
+                                  name="name"
+                                  defaultValue={editName}
+                                  placeholder="Nome da categoria"
+                                  disabled={editPending}
+                                />
+                                <div className="flex flex-wrap gap-2">
+                                  {COLORS.map((c) => (
+                                    <label key={c} className={`cursor-pointer ${editPending ? "pointer-events-none opacity-50" : ""}`}>
+                                      <input
+                                        type="radio"
+                                        name="color"
+                                        value={c}
+                                        defaultChecked={c === editColor}
+                                        className="sr-only peer"
+                                        disabled={editPending}
+                                      />
+                                      <div
+                                        className="h-8 w-8 rounded-full ring-offset-2 ring-offset-zinc-950 peer-checked:ring-2 peer-checked:ring-white"
+                                        style={{ backgroundColor: c }}
+                                      />
+                                    </label>
+                                  ))}
+                                </div>
+                                <div className="flex gap-2">
+                                  <button
+                                    type="submit"
+                                    disabled={editPending}
+                                    className="flex-1 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
+                                  >
+                                    {editPending ? "Salvando..." : "Salvar"}
+                                  </button>
+                                  <DialogClose className="rounded-lg border border-zinc-700 px-4 py-2 text-sm text-zinc-400 hover:text-white">
+                                    Cancelar
+                                  </DialogClose>
+                                </div>
+                              </form>
+                            </DialogContent>
+                          </Dialog>
+                          <form
+                            onSubmit={async (e) => {
+                              e.preventDefault();
+                              if (!confirm("Arquivar esta categoria?")) return;
+                              setArchiveError(null);
+                              const result = await archiveCategory(cat.id);
+                              if (result?.error) {
+                                setArchiveError(result.error);
+                              } else {
+                                router.refresh();
+                              }
+                            }}
+                          >
+                            <button
+                              type="submit"
+                              className="flex items-center gap-1 text-sm text-zinc-600 transition-colors hover:text-yellow-400"
+                            >
+                              <Archive size={14} />
+                              <span className="hidden sm:inline">Arquivar</span>
+                            </button>
+                          </form>
+                        </div>
                       </div>
-                      <div className="flex gap-2">
-                        <button
-                          type="submit"
-                          disabled={editPending}
-                          className="flex-1 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                          {editPending ? "Salvando..." : "Salvar"}
-                        </button>
-                        <DialogClose className="rounded-lg border border-zinc-700 px-4 py-2 text-sm text-zinc-400 hover:text-white">
-                          Cancelar
-                        </DialogClose>
-                      </div>
-                    </form>
-                  </DialogContent>
-                </Dialog>
-                <form
-                  onSubmit={async (e) => {
-                    e.preventDefault();
-                    if (!confirm("Arquivar esta categoria?")) return;
-                    setArchiveError(null);
-                    const result = await archiveCategory(cat.id);
-                    if (result?.error) {
-                      setArchiveError(result.error);
-                    } else {
-                      router.refresh();
-                    }
-                  }}
-                >
-                  <button
-                    type="submit"
-                    className="flex items-center gap-1 text-sm text-zinc-600 transition-colors hover:text-yellow-400"
-                  >
-                    <Archive size={14} />
-                    <span className="hidden sm:inline">Arquivar</span>
-                  </button>
-                </form>
-              </div>
-            </div>
-          ))
+                    ))}
+                  </div>
+                </div>
+              )
+            })}
+          </>
         )}
       </div>
 
