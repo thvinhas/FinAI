@@ -77,14 +77,27 @@ export function LoginForm() {
         <div className="h-px flex-1 bg-zinc-800" />
       </div>
 
-      <form action={signInWithGoogle}>
-        <button
-          type="submit"
-          className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-2 text-white transition-colors hover:bg-zinc-800"
-        >
-          Entrar com Google
-        </button>
-      </form>
+      <button
+        type="button"
+        onClick={async () => {
+          console.log("[Google Login] clicou")
+          setPending(true)
+          setError("")
+          const result = await signInWithGoogle()
+          console.log("[Google Login] result:", result)
+          if (result?.url) {
+            console.log("[Google Login] redirecionando para:", result.url)
+            window.location.href = result.url
+          } else {
+            setError(result?.error || "Erro ao conectar com Google")
+            setPending(false)
+          }
+        }}
+        disabled={pending}
+        className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-2 text-white transition-colors hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        {pending ? "Conectando..." : "Entrar com Google"}
+      </button>
 
       <p className="mt-6 text-center text-sm text-zinc-500">
         {isSignUp ? "Já tem conta?" : "Não tem conta?"}{" "}
