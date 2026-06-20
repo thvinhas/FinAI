@@ -10,6 +10,10 @@ const geist = Geist({subsets:['latin'],variable:'--font-sans'});
 export const metadata: Metadata = {
   title: "FinApp - Controle Financeiro",
   description: "Aplicativo de controle financeiro pessoal",
+  icons: {
+    icon: "/icon.png",
+    apple: "/icon.png",
+  },
 };
 
 export default function RootLayout({
