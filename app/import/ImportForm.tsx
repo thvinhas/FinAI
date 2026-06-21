@@ -12,7 +12,7 @@ import {
 } from "lucide-react"
 import { applyKeywordMap } from "./categorizer"
 import Papa from "papaparse"
-import { detectFormat, parseCSV, parseOFX, detectCSVHeaders, autoDetectMapping, filterGarbage, extractGarbageKeywords, parseDate, parseBRL } from "./parser"
+import { detectFormat, parseCSV, parseOFX, detectCSVHeaders, autoDetectMapping, filterGarbage, extractGarbageKeywords, parseDate, parseCurrency } from "./parser"
 import KeywordManager from "./KeywordManager"
 import IgnoreKeywordManager from "./IgnoreKeywordManager"
 import ImportPreview from "./ImportPreview"
@@ -196,7 +196,7 @@ export default function ImportForm({
           .map((row) => {
             const date = parseDate(row[0] ?? "")
             const description = (row[1] ?? "").trim()
-            const amount = parseBRL(row[2] ?? "")
+            const amount = parseCurrency(row[2] ?? "")
             if (!date || !description || !amount) return null
             return {
               date,
@@ -421,7 +421,7 @@ export default function ImportForm({
               { value: "", label: "Selecione uma conta" },
               ...accounts.map((a) => ({
                 value: a.id,
-                label: `${a.name} (R$ ${Number(a.balance).toFixed(2)})`,
+                label: `${a.name} (€ ${Number(a.balance).toFixed(2)})`,
                 color: a.color,
               })),
             ] as SelectOption[]

@@ -157,7 +157,7 @@ export default function TransactionList({
             }`}
           >
             {t.type === "receita" ? "+" : t.type === "transferencia" ? "⇄" : "-"}
-            R$ {Number(t.amount).toFixed(2)}
+            € {Number(t.amount).toFixed(2)}
           </span>
         );
       },
@@ -211,7 +211,7 @@ export default function TransactionList({
                 saldo >= 0 ? "text-emerald-400" : "text-red-400"
               }`}
             >
-              R$ {saldo.toFixed(2)}
+              € {saldo.toFixed(2)}
             </p>
           </div>
         </div>
@@ -223,7 +223,7 @@ export default function TransactionList({
           <div className="min-w-0">
             <p className="text-xs text-zinc-400 sm:text-sm">Receitas</p>
             <p className="truncate text-lg font-bold text-emerald-400 sm:text-2xl">
-              R$ {receitas.toFixed(2)}
+              € {receitas.toFixed(2)}
             </p>
           </div>
         </div>
@@ -235,7 +235,7 @@ export default function TransactionList({
           <div className="min-w-0">
             <p className="text-xs text-zinc-400 sm:text-sm">Despesas</p>
             <p className="truncate text-lg font-bold text-red-400 sm:text-2xl">
-              R$ {despesas.toFixed(2)}
+              € {despesas.toFixed(2)}
             </p>
           </div>
         </div>

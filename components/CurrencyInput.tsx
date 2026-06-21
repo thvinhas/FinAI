@@ -1,13 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-
-function formatBRL(value: number): string {
-  return value.toLocaleString("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-  });
-}
+import { formatCurrency } from "@/lib/format";
 
 type Props = {
   name: string;
@@ -24,7 +18,7 @@ export default function CurrencyInput({
   autoFocus,
 }: Props & { autoFocus?: boolean }) {
   const [raw, setRaw] = useState(defaultValue);
-  const [display, setDisplay] = useState(formatBRL(defaultValue));
+  const [display, setDisplay] = useState(formatCurrency(defaultValue));
   const hiddenRef = useRef<HTMLInputElement>(null);
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -32,7 +26,7 @@ export default function CurrencyInput({
     const cents = parseInt(digits || "0", 10);
     const value = cents / 100;
     setRaw(value);
-    setDisplay(formatBRL(value));
+    setDisplay(formatCurrency(value));
   }
 
   function handleFocus(e: React.FocusEvent<HTMLInputElement>) {

@@ -135,7 +135,7 @@ export function parseCSV(
   const result = rows
     .map((row) => {
       const rawAmount = row[headers[col.amount]] ?? ""
-      const amount = parseBRL(rawAmount)
+      const amount = parseCurrency(rawAmount)
       const rawType =
         col.type != null ? row[headers[col.type]] ?? "" : ""
       const isReceita =
@@ -231,9 +231,9 @@ export function parseDate(value: string): string {
   return value
 }
 
-export function parseBRL(value: string): number {
+export function parseCurrency(value: string): number {
   const cleaned = value
-    .replace(/R?\$?\s*/gi, "")
+    .replace(/[€]\s*/gi, "")
     .replace(/\./g, "")
     .replace(",", ".")
     .trim()

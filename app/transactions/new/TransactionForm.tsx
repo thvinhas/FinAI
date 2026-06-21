@@ -115,7 +115,7 @@ export default function TransactionForm({
                 { value: "", label: "Selecione" },
                 ...accounts.map((a) => ({
                   value: a.id,
-                  label: `${a.name} (R$ ${Number(a.balance).toFixed(2)})`,
+                  label: `${a.name} (€ ${Number(a.balance).toFixed(2)})`,
                   color: a.color,
                 })),
               ]}
@@ -200,7 +200,7 @@ export default function TransactionForm({
                 { value: "", label: "Selecione uma conta" },
                 ...accounts.map((a) => ({
                   value: a.id,
-                  label: `${a.name} (R$ ${Number(a.balance).toFixed(2)})`,
+                  label: `${a.name} (€ ${Number(a.balance).toFixed(2)})`,
                   color: a.color,
                 })),
               ]}

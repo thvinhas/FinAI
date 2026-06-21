@@ -53,7 +53,7 @@ export default function AccountList({
             total >= 0 ? "text-emerald-400" : "text-red-400"
           }`}
         >
-          R$ {total.toFixed(2)}
+          € {total.toFixed(2)}
         </p>
       </div>
 
@@ -83,7 +83,7 @@ export default function AccountList({
                   : "text-red-400"
               }`}
             >
-              R$ {Number(acc.balance).toFixed(2)}
+              € {Number(acc.balance).toFixed(2)}
             </p>
             <div className="flex items-center gap-2">
               <a

@@ -33,7 +33,7 @@ export default function MobileTransactionCards({
               }`}
             >
               {t.type === "receita" ? "+" : t.type === "transferencia" ? "⇄" : "-"}
-              R$ {Number(t.amount).toFixed(2)}
+              € {Number(t.amount).toFixed(2)}
             </span>
           </div>
 

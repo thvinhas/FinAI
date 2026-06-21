@@ -4,13 +4,7 @@ import { Trash2, ArrowRight, ArrowLeft } from "lucide-react"
 import SearchSelect from "@/components/SearchSelect"
 import type { ParsedTransaction } from "@/types/import"
 import type { Category, Account } from "@/types/database"
-
-function formatBRL(value: number): string {
-  return value.toLocaleString("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-  })
-}
+import { formatCurrency } from "@/lib/format"
 
 export default function ImportPreview({
   transactions,
@@ -65,7 +59,7 @@ export default function ImportPreview({
     { value: "", label: "Selecione a conta de destino" },
     ...otherAccounts.map((a) => ({
       value: a.id,
-      label: `${a.name} (R$ ${Number(a.balance).toFixed(2)})`,
+      label: `${a.name} (€ ${Number(a.balance).toFixed(2)})`,
       color: a.color,
     })),
   ]
@@ -74,7 +68,7 @@ export default function ImportPreview({
     { value: "", label: "Selecione a conta de origem" },
     ...otherAccounts.map((a) => ({
       value: a.id,
-      label: `${a.name} (R$ ${Number(a.balance).toFixed(2)})`,
+      label: `${a.name} (€ ${Number(a.balance).toFixed(2)})`,
       color: a.color,
     })),
   ]
@@ -128,7 +122,7 @@ export default function ImportPreview({
               <input
                 type="text"
                 inputMode="decimal"
-                value={formatBRL(tx.amount)}
+                  value={formatCurrency(tx.amount)}
                 onFocus={(e) => e.target.select()}
                 onChange={(e) => {
                   const digits = e.target.value.replace(/\D/g, "")

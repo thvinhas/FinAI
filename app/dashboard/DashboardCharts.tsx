@@ -54,7 +54,7 @@ export default function DashboardCharts({ data }: { data: DashboardData }) {
             <div className="min-w-0">
               <p className="text-xs text-zinc-400 sm:text-sm">Saldo Total</p>
               <p className="truncate text-lg font-bold text-emerald-400 sm:text-2xl">
-                R$ {data.saldoTotal.toFixed(2)}
+                € {data.saldoTotal.toFixed(2)}
               </p>
             </div>
           </div>
@@ -93,7 +93,7 @@ export default function DashboardCharts({ data }: { data: DashboardData }) {
                 data.saldoTotal >= 0 ? "text-emerald-400" : "text-red-400"
               }`}
             >
-              R$ {data.saldoTotal.toFixed(2)}
+              € {data.saldoTotal.toFixed(2)}
             </p>
           </div>
         </div>
@@ -105,7 +105,7 @@ export default function DashboardCharts({ data }: { data: DashboardData }) {
           <div className="min-w-0">
             <p className="text-xs text-zinc-400 sm:text-sm">Receitas (mês)</p>
             <p className="truncate text-lg font-bold text-emerald-400 sm:text-2xl">
-              R$ {data.receitas.toFixed(2)}
+              € {data.receitas.toFixed(2)}
             </p>
           </div>
         </div>
@@ -117,7 +117,7 @@ export default function DashboardCharts({ data }: { data: DashboardData }) {
           <div className="min-w-0">
             <p className="text-xs text-zinc-400 sm:text-sm">Despesas (mês)</p>
             <p className="truncate text-lg font-bold text-red-400 sm:text-2xl">
-              R$ {data.despesas.toFixed(2)}
+              € {data.despesas.toFixed(2)}
             </p>
           </div>
         </div>
@@ -160,11 +160,11 @@ export default function DashboardCharts({ data }: { data: DashboardData }) {
                     fontSize={12}
                     tickLine={false}
                     axisLine={false}
-                    tickFormatter={(v) => `R$${(v / 1000).toFixed(0)}k`}
+                    tickFormatter={(v) => `€${(v / 1000).toFixed(0)}k`}
                   />
                   <Tooltip
                     formatter={(value: unknown) =>
-                      `R$ ${Number(value).toFixed(2)}`
+                      `€ ${Number(value).toFixed(2)}`
                     }
                     contentStyle={{
                       background: "#18181b",
@@ -248,7 +248,7 @@ export default function DashboardCharts({ data }: { data: DashboardData }) {
                   {data.economia.pct.toFixed(0)}%
                 </p>
                 <p className="mt-1 text-sm text-zinc-400">
-                  R$ {Math.abs(data.economia.value).toFixed(2)}
+                  € {Math.abs(data.economia.value).toFixed(2)}
                 </p>
                 <p className="text-xs text-zinc-500">
                   {isPositive ? "economizado" : "no vermelho"}
@@ -290,7 +290,7 @@ export default function DashboardCharts({ data }: { data: DashboardData }) {
                     formatter={(value, name) => {
                       const total = data.byCategoryReceita.reduce((s, c) => s + c.value, 0);
                       const pct = total > 0 ? ((Number(value) / total) * 100).toFixed(1) : "0";
-                      return [`R$ ${Number(value).toFixed(2)} (${pct}%)`, name];
+                      return [`€ ${Number(value).toFixed(2)} (${pct}%)`, name];
                     }}
                     contentStyle={{
                       background: "#18181b",
@@ -314,7 +314,7 @@ export default function DashboardCharts({ data }: { data: DashboardData }) {
                     />
                     <span className="text-zinc-400">{cat.name}</span>
                     <span className="ml-auto font-medium text-white">
-                      R$ {cat.value.toFixed(2)}
+                      € {cat.value.toFixed(2)}
                     </span>
                   </div>
                 ))}
@@ -353,7 +353,7 @@ export default function DashboardCharts({ data }: { data: DashboardData }) {
                     formatter={(value, name) => {
                       const total = data.byCategory.reduce((s, c) => s + c.value, 0);
                       const pct = total > 0 ? ((Number(value) / total) * 100).toFixed(1) : "0";
-                      return [`R$ ${Number(value).toFixed(2)} (${pct}%)`, name];
+                      return [`€ ${Number(value).toFixed(2)} (${pct}%)`, name];
                     }}
                     contentStyle={{
                       background: "#18181b",
@@ -377,7 +377,7 @@ export default function DashboardCharts({ data }: { data: DashboardData }) {
                     />
                     <span className="text-zinc-400">{cat.name}</span>
                     <span className="ml-auto font-medium text-white">
-                      R$ {cat.value.toFixed(2)}
+                      € {cat.value.toFixed(2)}
                     </span>
                   </div>
                 ))}
