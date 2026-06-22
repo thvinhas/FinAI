@@ -30,7 +30,14 @@ create table if not exists transactions (
   description text,
   date date,
   destination_account_id uuid,
-  created_at timestamptz default now()
+  created_at timestamptz default now(),
+
+  constraint transactions_account_id_fkey
+    foreign key (account_id) references accounts(id) on delete set null,
+  constraint transactions_destination_account_id_fkey
+    foreign key (destination_account_id) references accounts(id) on delete set null,
+  constraint transactions_category_id_fkey
+    foreign key (category_id) references categories(id) on delete set null
 );
 
 -- RLS
@@ -55,6 +62,6 @@ do $$ begin
 end $$;
 
 -- Grants
-grant all on accounts to anon, authenticated;
-grant all on categories to anon, authenticated;
-grant all on transactions to anon, authenticated;
+grant all on accounts to anon, authenticated, service_role;
+grant all on categories to anon, authenticated, service_role;
+grant all on transactions to anon, authenticated, service_role;

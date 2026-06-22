@@ -4,6 +4,7 @@ import Header from "@/components/Header"
 import KeywordManager from "@/app/import/KeywordManager"
 import IgnoreKeywordManager from "@/app/import/IgnoreKeywordManager"
 import TransferMappingManager from "@/app/import/TransferMappingManager"
+import TelegramSettingsCard from "@/components/TelegramSettingsCard"
 import type { Account } from "@/types/database"
 import type { TransferMapping } from "@/types/import"
 
@@ -16,12 +17,14 @@ export default async function SettingsPage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect("/login")
 
-  const [accountsResult, mappingsResult] = await Promise.all([
+  const [accountsResult, mappingsResult, telegramResult] = await Promise.all([
     supabase.from("accounts").select("*").is("archived_at", null).order("name"),
     supabase.from("import_transfer_mappings").select("*").eq("user_id", user.id),
+    supabase.from("telegram_links").select("*").eq("user_id", user.id).maybeSingle(),
   ])
 
   const accounts = (accountsResult.data ?? []) as Account[]
+  const telegramLink = telegramResult.data as { id: string; user_id: string; chat_id: number | null; token: string; created_at: string } | null
   const mappings = (mappingsResult.data ?? []).map((r) => ({
     id: r.id,
     user_id: r.user_id,
@@ -38,6 +41,7 @@ export default async function SettingsPage() {
         <h1 className="mb-8 text-2xl font-bold text-white">Configurações</h1>
 
         <div className="space-y-6">
+          <TelegramSettingsCard link={telegramLink} />
           <TransferMappingManager
             mappings={mappings}
             accounts={accounts}
