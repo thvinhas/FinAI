@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { archiveAccount, restoreAccount } from "@/actions/accounts";
 import { PiggyBank, Building2, Wallet, CreditCard, Archive, RotateCcw, Pencil } from "lucide-react";
 import type { Account } from "@/types/database";
+import { formatDate } from "@/lib/format";
 
 const icons: Record<string, React.ReactNode> = {
   checking: <Building2 size={20} />,
@@ -22,9 +23,11 @@ const labels: Record<string, string> = {
 export default function AccountList({
   accounts,
   archivedAccounts,
+  lastImportDates = {},
 }: {
   accounts: Account[];
   archivedAccounts?: Account[];
+  lastImportDates?: Record<string, string | null>;
 }) {
   const router = useRouter();
 
@@ -73,6 +76,9 @@ export default function AccountList({
             <div className="min-w-0">
               <p className="truncate font-medium text-white">{acc.name}</p>
               <p className="text-xs text-zinc-500">{labels[acc.type] ?? acc.type}</p>
+              <p className="mt-0.5 text-[11px] text-zinc-600">
+                Último import: {formatDate(lastImportDates[acc.id] ?? null)}
+              </p>
             </div>
           </div>
           <div className="flex w-full items-center justify-between gap-3 sm:w-auto sm:gap-4">

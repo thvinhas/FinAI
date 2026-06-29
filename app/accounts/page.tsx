@@ -1,7 +1,7 @@
 import { Suspense } from "react";
 import type { Metadata } from "next";
 import { createClient } from "@/lib/supabase/server";
-import { getAccounts, getArchivedAccounts } from "@/actions/accounts";
+import { getAccounts, getArchivedAccounts, getLastImportDates } from "@/actions/accounts";
 import Header from "@/components/Header";
 import Toast from "@/components/Toast";
 import AccountList from "./AccountList";
@@ -49,9 +49,10 @@ export default async function AccountsPage() {
 }
 
 async function AccountsContent() {
-  const [accounts, archivedAccounts] = await Promise.all([
+  const [accounts, archivedAccounts, lastImportDates] = await Promise.all([
     getAccounts(),
     getArchivedAccounts(),
+    getLastImportDates(),
   ]);
 
   return (
@@ -68,6 +69,7 @@ async function AccountsContent() {
       <AccountList
         accounts={accounts ?? []}
         archivedAccounts={archivedAccounts ?? []}
+        lastImportDates={lastImportDates}
       />
     </>
   );

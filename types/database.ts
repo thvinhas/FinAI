@@ -42,3 +42,11 @@ export interface ImportKeyword {
   keyword: string
   created_at: string
 }
+
+export interface ImportLog {
+  id: string
+  user_id: string
+  account_id: string
+  transaction_count: number
+  created_at: string | null
+}

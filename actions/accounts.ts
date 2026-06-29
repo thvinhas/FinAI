@@ -96,3 +96,26 @@ export async function updateAccountBalance(id: string, balance: number) {
   await supabase.from("accounts").update({ balance }).eq("id", id);
   revalidatePath("/dashboard");
 }
+
+export async function getLastImportDates(): Promise<Record<string, string | null>> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return {};
+
+  const { data } = await supabase
+    .from("import_logs")
+    .select("account_id, created_at")
+    .eq("user_id", user.id)
+    .order("created_at", { ascending: false });
+
+  if (!data) return {};
+
+  const map: Record<string, string | null> = {};
+  for (const log of data) {
+    if (!(log.account_id in map)) {
+      map[log.account_id] = log.created_at;
+    }
+  }
+
+  return map;
+}

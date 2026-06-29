@@ -123,6 +123,12 @@ export async function importTransactions(
 
   if (error) return { error: error.message, noCategory, duplicates, noDestiny: invalidTransfers }
 
+  await supabase.from("import_logs").insert({
+    user_id: user.id,
+    account_id: accountId,
+    transaction_count: allToImport.length,
+  })
+
   if (regularDelta !== 0) {
     await supabase
       .from("accounts")
