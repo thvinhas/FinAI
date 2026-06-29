@@ -12,11 +12,11 @@ import {
 } from "lucide-react"
 import { applyKeywordMap } from "./categorizer"
 import Papa from "papaparse"
-import { detectFormat, parseCSV, parseOFX, detectCSVHeaders, autoDetectMapping, filterGarbage, extractGarbageKeywords, parseDate, parseCurrency } from "./parser"
+import { detectFormat, parseCSV, parseOFX, detectCSVHeaders, autoDetectMapping, filterGarbage, extractGarbageKeywords, parseDate, parseCurrency, cleanDescription } from "./parser"
 import KeywordManager from "./KeywordManager"
 import IgnoreKeywordManager from "./IgnoreKeywordManager"
 import ImportPreview from "./ImportPreview"
-import { importTransactions, parsePDFWithLLM } from "@/actions/import"
+import { importTransactions, parsePDFWithLLM, classifyBatch } from "@/actions/import"
 import { addIgnoreKeyword } from "@/actions/import-ignore-keywords"
 import { getTransferMappings, saveTransferMapping } from "@/actions/import-transfer-mappings"
 import type { ParsedTransaction, TransferMapping } from "@/types/import"
@@ -133,6 +133,14 @@ export default function ImportForm({
     if (!rawText.trim()) return
     setProcessingLLM(true)
     setError("")
+
+    const fmt = detectFormat(fileName, rawText)
+
+    if (fmt === "csv") {
+      processCSV(rawText, transferKeywords, ignoreKeywords)
+      return
+    }
+
     const catList = categories.map((c) => ({ id: c.id, name: c.name }))
     console.log("[LLM Process] Ignore keywords:", ignoreKeywords)
     const result = await parsePDFWithLLM(rawText, catList, ignoreKeywords)
@@ -153,8 +161,6 @@ export default function ImportForm({
       return
     }
 
-    // Fallback: try traditional parser for CSV/OFX
-    const fmt = detectFormat(fileName, rawText)
     if (fmt === "ofx") {
       const raw = parseOFX(rawText, transferKeywords)
       const suggestions = extractGarbageKeywords(raw, ignoreKeywords)
@@ -164,58 +170,122 @@ export default function ImportForm({
         applyCategories(txns)
         return
       }
-    } else {
-      const headers = detectCSVHeaders(rawText)
-      const autoMap = autoDetectMapping(headers)
-      // Try auto-detected mapping first
-      if (autoMap) {
-        const raw = parseCSV(rawText, autoMap, transferKeywords)
-        const suggestions = extractGarbageKeywords(raw, ignoreKeywords)
-        setSuggestedKeywords(suggestions)
-        const txns = filterGarbage(raw, ignoreKeywords)
-        if (txns.length > 0) {
-          applyCategories(txns)
-          return
-        }
-      }
-      // Try with default column positions (date=0, description=1, amount=2)
-      if (headers.length >= 3) {
-        const defaultMap = { date: 0, description: 1, amount: 2, type: null }
-        const raw = parseCSV(rawText, defaultMap, transferKeywords)
-        const txns = filterGarbage(raw, ignoreKeywords)
-        if (txns.length > 0) {
-          applyCategories(txns)
-          return
-        }
-      }
-      // Last resort: parse without header row (each row is [date, desc, amount])
-      const parsed = Papa.parse(rawText, { header: false, skipEmptyLines: true })
-      const rows = parsed.data as string[][]
-      if (rows.length > 0) {
-        const txns = rows
-          .map((row) => {
-            const date = parseDate(row[0] ?? "")
-            const description = (row[1] ?? "").trim()
-            const amount = parseCurrency(row[2] ?? "")
-            if (!date || !description || !amount) return null
-            return {
-              date,
-              description,
-              amount: Math.abs(amount),
-              type: (amount >= 0 ? "receita" : "despesa") as ParsedTransaction["type"],
-              category_id: null,
-              destination_account_id: null,
-            }
-          })
-          .filter((t) => t !== null) as ParsedTransaction[]
-        if (txns.length > 0) {
-          applyCategories(txns)
-          return
-        }
-      }
     }
 
     setError("Nenhuma transação encontrada. Verifique se o texto contém dados de extrato bancário.")
+    setProcessingLLM(false)
+  }
+
+  async function processCSV(text: string, transferKeywords: string[], ignoreKeywords: string[]) {
+    let txns: ParsedTransaction[] = []
+
+    const headers = detectCSVHeaders(text)
+    const autoMap = autoDetectMapping(headers)
+    if (autoMap) {
+      const raw = parseCSV(text, autoMap, transferKeywords)
+      const suggestions = extractGarbageKeywords(raw, ignoreKeywords)
+      setSuggestedKeywords(suggestions)
+      txns = filterGarbage(raw, ignoreKeywords)
+    }
+
+    if (txns.length === 0) {
+      // Fallback: parse with header=false and auto-detect column positions
+      const parsed = Papa.parse(text, { header: false, skipEmptyLines: true })
+      const rows = parsed.data as string[][]
+      if (rows.length < 2) {
+        setError("Nenhuma transação encontrada.")
+        setProcessingLLM(false)
+        return
+      }
+
+      const headerRow = rows[0].map((h) => h.toLowerCase().trim())
+      const colDate = headerRow.findIndex((h) => /data|date|dt/.test(h))
+      const colDesc = headerRow.findIndex((h) => /descricao|description|desc|historico|memo/.test(h))
+      const colDebit = headerRow.findIndex((h) => h.includes("debit"))
+      const colCredit = headerRow.findIndex((h) => h.includes("credit"))
+      const colType = headerRow.findIndex((h) => /tipo|type|transaction/.test(h))
+
+      const dataRows = rows.slice(1)
+      txns = dataRows
+        .map((row): ParsedTransaction | null => {
+          const date = colDate >= 0 ? parseDate(row[colDate] ?? "") : null
+          const description = colDesc >= 0 ? cleanDescription((row[colDesc] ?? "").trim()) : null
+          if (!date || !description) return null
+
+          const rawType = colType >= 0 ? (row[colType] ?? "").toLowerCase() : ""
+          const isCredit = rawType.includes("cred") || rawType === "credit"
+
+          let amount = 0
+          if (colDebit >= 0 && colCredit >= 0) {
+            const debit = parseFloat((row[colDebit] ?? "").replace(",", "."))
+            const credit = parseFloat((row[colCredit] ?? "").replace(",", "."))
+            amount = isCredit && credit > 0 ? credit : debit > 0 ? debit : credit || debit || 0
+          }
+          if (!amount) return null
+
+          return {
+            date,
+            description,
+            amount: Math.abs(amount),
+            type: isCredit ? "receita" as const : "despesa" as const,
+            category_id: null,
+            destination_account_id: null,
+          } as ParsedTransaction
+        })
+        .filter((t): t is ParsedTransaction => t !== null)
+
+      txns = filterGarbage(txns, ignoreKeywords)
+    }
+
+    if (txns.length === 0) {
+      setError("Nenhuma transação encontrada. Verifique o formato do CSV.")
+      setProcessingLLM(false)
+      return
+    }
+
+    // Apply keyword mapping
+    const withCats = txns.map((t) => {
+      const mapping = transferMappings.find(
+        (m) => t.description.toLowerCase().includes(m.description.toLowerCase())
+      )
+      if (mapping) {
+        return {
+          ...t,
+          type: "transferencia" as const,
+          category_id: null,
+          destination_account_id: mapping.transfer_type === "destination" ? mapping.account_id : null,
+          origin_account_id: mapping.transfer_type === "origin" ? mapping.account_id : null,
+        }
+      }
+      return {
+        ...t,
+        destination_account_id: null,
+        origin_account_id: null,
+        category_id: applyKeywordMap(t.description, keywordMap) ?? t.category_id,
+      }
+    })
+
+    // Classify uncategorized with LLM
+    const catList = categories.map((c) => ({ id: c.id, name: c.name }))
+    const uncategorized = withCats.filter((t) => !t.category_id && t.type !== "transferencia")
+    if (uncategorized.length > 0 && catList.length > 0) {
+      try {
+        const llmResult = await classifyBatch(
+          uncategorized.map((t) => t.description),
+          catList,
+        )
+        for (const t of withCats) {
+          if (!t.category_id && t.type !== "transferencia") {
+            t.category_id = llmResult[t.description] ?? null
+          }
+        }
+      } catch (e) {
+        console.error("[CSV] LLM classification error:", e)
+      }
+    }
+
+    setTransactions(withCats)
+    setStep("preview")
     setProcessingLLM(false)
   }
 

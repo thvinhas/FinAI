@@ -137,3 +137,61 @@ Categorias: ${categories.map((c) => c.name).join(", ")}`;
     return null;
   }
 }
+
+export async function classifyBatchWithLLM(
+  descriptions: string[],
+  categories: { id: string; name: string }[],
+): Promise<Record<string, string | null>> {
+  const groq = getGroq();
+  if (!groq || categories.length === 0 || descriptions.length === 0) return {};
+
+  const catNames = categories.map((c) => c.name).join(", ");
+  const items = descriptions.map((d, i) => `${i + 1}. "${d}"`).join("\n");
+
+  const prompt = `Classifique cada transacao abaixo em uma das categorias disponiveis.
+Categorias: ${catNames}
+
+Para cada item, responda APENAS com o numero e o nome exato da categoria, um por linha.
+Se nao souber, responda "null".
+
+${items}
+
+Exemplo de resposta:
+1. Alimentacao
+2. Transporte
+3. null`;
+
+  try {
+    const completion = await groq.chat.completions.create({
+      model: "llama-3.1-8b-instant",
+      messages: [{ role: "user", content: prompt }],
+      temperature: 0,
+      max_tokens: 1500,
+    });
+
+    const content = completion.choices[0]?.message?.content ?? "";
+    console.log("[LLM] Batch classification:", content);
+
+    const result: Record<string, string | null> = {};
+    for (let i = 0; i < descriptions.length; i++) {
+      const desc = descriptions[i];
+      const lineRegex = new RegExp(`^${i + 1}\\.\\s*(.+)$`, "m");
+      const match = content.match(lineRegex);
+      if (match) {
+        const answer = match[1].trim().toLowerCase();
+        if (answer === "null") {
+          result[desc] = null;
+        } else {
+          const cat = categories.find((c) => c.name.toLowerCase() === answer);
+          result[desc] = cat?.id ?? null;
+        }
+      } else {
+        result[desc] = null;
+      }
+    }
+    return result;
+  } catch (e) {
+    console.error("[LLM] Batch classification error:", e);
+    return {};
+  }
+}

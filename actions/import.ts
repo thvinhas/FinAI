@@ -3,7 +3,7 @@
 import { createClient } from "@/lib/supabase/server"
 import { revalidatePath } from "next/cache"
 import type { ParsedTransaction } from "@/types/import"
-import { extractFromPDFText } from "@/app/import/llm"
+import { extractFromPDFText, classifyBatchWithLLM } from "@/app/import/llm"
 
 export async function importTransactions(
   accountId: string,
@@ -28,7 +28,6 @@ export async function importTransactions(
   const regular = transactions.filter((t) => t.type !== "transferencia")
 
   const noCategory = regular.filter((t) => !t.category_id)
-  const withCategory = regular.filter((t) => t.category_id)
 
   const validatesTransfers: ParsedTransaction[] = []
   const invalidTransfers: ParsedTransaction[] = []
@@ -50,9 +49,7 @@ export async function importTransactions(
     }
   }
 
-  const validRegular = force ? withCategory : withCategory
-
-  if (validRegular.length === 0 && validatesTransfers.length === 0) {
+  if (regular.length === 0 && validatesTransfers.length === 0) {
     return {
       error: "Nenhuma transação válida para importar.",
       noCategory,
@@ -61,7 +58,7 @@ export async function importTransactions(
     }
   }
 
-  const allDescs = [...validRegular, ...validatesTransfers].map((t) => t.description)
+  const allDescs = [...regular, ...validatesTransfers].map((t) => t.description)
   const { data: existing } = await supabase
     .from("transactions")
     .select("description, date")
@@ -73,14 +70,14 @@ export async function importTransactions(
   )
 
   const toImportRegular = force
-    ? validRegular
-    : validRegular.filter((t) => !existingSet.has(`${t.description}|${t.date}`))
+    ? regular
+    : regular.filter((t) => !existingSet.has(`${t.description}|${t.date}`))
 
   const toImportTransfers = force
     ? validatesTransfers
     : validatesTransfers.filter((t) => !existingSet.has(`${t.description}|${t.date}`))
 
-  const duplicates = [...validRegular, ...validatesTransfers].filter((t) =>
+  const duplicates = [...regular, ...validatesTransfers].filter((t) =>
     existingSet.has(`${t.description}|${t.date}`)
   )
 
@@ -211,4 +208,11 @@ export async function parsePDFWithLLM(
   console.log("[parsePDFWithLLM] Result:", JSON.stringify(result, null, 2))
   if (result.error) return { error: result.error }
   return { transactions: result.transactions, suggested_ignore_keywords: result.suggested_ignore_keywords }
+}
+
+export async function classifyBatch(
+  descriptions: string[],
+  categories: { id: string; name: string }[],
+): Promise<Record<string, string | null>> {
+  return classifyBatchWithLLM(descriptions, categories)
 }
