@@ -203,7 +203,7 @@ export default function ImportForm({
       const colDesc = headerRow.findIndex((h) => /descricao|description|desc|historico|memo/.test(h))
       const colDebit = headerRow.findIndex((h) => h.includes("debit"))
       const colCredit = headerRow.findIndex((h) => h.includes("credit"))
-      const colType = headerRow.findIndex((h) => /tipo|type|transaction/.test(h))
+      const colType = headerRow.findIndex((h) => /\b(?:type|tipo|transaction)\b/.test(h))
 
       const dataRows = rows.slice(1)
       txns = dataRows
