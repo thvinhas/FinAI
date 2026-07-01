@@ -54,6 +54,7 @@ export default function ImportForm({
   const [accountId, setAccountId] = useState("")
   const [importing, setImporting] = useState(false)
   const [pendingDuplicates, setPendingDuplicates] = useState<ParsedTransaction[] | null>(null)
+  const [pendingTransferDuplicates, setPendingTransferDuplicates] = useState<ParsedTransaction[] | null>(null)
 
   // Transfer keywords
   const [transferKeywords, setTransferKeywords] = useState<string[]>([])
@@ -203,6 +204,7 @@ export default function ImportForm({
       const colDesc = headerRow.findIndex((h) => /descricao|description|desc|historico|memo/.test(h))
       const colDebit = headerRow.findIndex((h) => h.includes("debit"))
       const colCredit = headerRow.findIndex((h) => h.includes("credit"))
+      const colAmount = headerRow.findIndex((h) => /^amount$|valor|value|montante/.test(h))
       const colType = headerRow.findIndex((h) => /\b(?:type|tipo|transaction)\b/.test(h))
 
       const dataRows = rows.slice(1)
@@ -213,13 +215,22 @@ export default function ImportForm({
           if (!date || !description) return null
 
           const rawType = colType >= 0 ? (row[colType] ?? "").toLowerCase() : ""
-          const isCredit = rawType.includes("cred") || rawType === "credit"
+          let isCredit = rawType.includes("cred") || rawType === "credit"
 
           let amount = 0
           if (colDebit >= 0 && colCredit >= 0) {
             const debit = parseCurrency(row[colDebit] ?? "")
             const credit = parseCurrency(row[colCredit] ?? "")
             amount = isCredit && credit > 0 ? credit : debit > 0 ? debit : credit || debit || 0
+          } else if (colAmount >= 0) {
+            const raw = parseCurrency(row[colAmount] ?? "")
+            if (raw > 0) {
+              isCredit = true
+              amount = raw
+            } else if (raw < 0) {
+              isCredit = false
+              amount = -raw
+            }
           }
           if (!amount) return null
 
@@ -331,6 +342,12 @@ export default function ImportForm({
     setImporting(true)
     setError("")
     const result = await importTransactions(accountId, transactions)
+    if (result?.transferDuplicates?.length && !pendingTransferDuplicates) {
+      setPendingTransferDuplicates(result.transferDuplicates)
+      setError(`${result.transferDuplicates.length} transferência(s) duplicada(s) encontrada(s) entre as contas. Deseja importá-la(s) mesmo assim?`)
+      setImporting(false)
+      return
+    }
     if (result?.duplicates?.length && !pendingDuplicates) {
       setPendingDuplicates(result.duplicates)
       const msg = result.noCategory?.length
@@ -402,6 +419,12 @@ export default function ImportForm({
   function handleSkipDuplicates() {
     setPendingDuplicates(null)
     const dupKeys = new Set(pendingDuplicates?.map((d) => `${d.date}|${d.description}`) ?? [])
+    setTransactions((prev) => prev.filter((t) => !dupKeys.has(`${t.date}|${t.description}`)))
+  }
+
+  function handleSkipTransferDuplicates() {
+    setPendingTransferDuplicates(null)
+    const dupKeys = new Set(pendingTransferDuplicates?.map((d) => `${d.date}|${d.description}`) ?? [])
     setTransactions((prev) => prev.filter((t) => !dupKeys.has(`${t.date}|${t.description}`)))
   }
 
@@ -567,6 +590,33 @@ export default function ImportForm({
             </button>
             <button
               onClick={handleSkipDuplicates}
+              disabled={importing}
+              className="rounded-lg border border-zinc-700 px-4 py-2 text-sm text-zinc-400 transition-colors hover:text-white disabled:opacity-50"
+            >
+              Pular duplicatas
+            </button>
+          </div>
+        </div>
+      )}
+
+      {pendingTransferDuplicates && (
+        <div className="rounded-xl border border-yellow-700 bg-yellow-900/30 p-4 text-sm">
+          <p className="mb-3 font-medium text-yellow-300">
+            {pendingTransferDuplicates.length} transferência(s) duplicada(s) encontrada(s)
+          </p>
+          <p className="mb-4 text-yellow-200/70">
+            Já existe(m) transferência(s) com o mesmo valor, data e contas. O que deseja fazer?
+          </p>
+          <div className="flex gap-3">
+            <button
+              onClick={handleForceImport}
+              disabled={importing}
+              className="rounded-lg bg-yellow-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-yellow-700 disabled:opacity-50"
+            >
+              {importing ? "Importando..." : "Importar mesmo assim"}
+            </button>
+            <button
+              onClick={handleSkipTransferDuplicates}
               disabled={importing}
               className="rounded-lg border border-zinc-700 px-4 py-2 text-sm text-zinc-400 transition-colors hover:text-white disabled:opacity-50"
             >

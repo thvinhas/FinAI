@@ -49,12 +49,41 @@ export async function importTransactions(
     }
   }
 
+  const transferDuplicates: ParsedTransaction[] = []
+  const transferDupKeys = new Set<string>()
+  if (!force) {
+    for (const t of validatesTransfers) {
+      const otherId = t.destination_account_id || t.origin_account_id
+      if (!otherId) continue
+
+      const { data: existingTxn } = await supabase
+        .from("transactions")
+        .select("id")
+        .eq("type", "transferencia")
+        .eq("amount", t.amount)
+        .eq("date", t.date)
+        .or(
+          `and(account_id.eq.${accountId},destination_account_id.eq.${otherId}),` +
+          `and(account_id.eq.${otherId},destination_account_id.eq.${accountId}),` +
+          `and(account_id.eq.${accountId},origin_account_id.eq.${otherId}),` +
+          `and(account_id.eq.${otherId},origin_account_id.eq.${accountId})`
+        )
+        .maybeSingle()
+
+      if (existingTxn) {
+        transferDuplicates.push(t)
+        transferDupKeys.add(`${t.amount}|${t.date}|${otherId}`)
+      }
+    }
+  }
+
   if (regular.length === 0 && validatesTransfers.length === 0) {
     return {
       error: "Nenhuma transação válida para importar.",
       noCategory,
       duplicates: [],
       noDestiny: invalidTransfers,
+      transferDuplicates,
     }
   }
 
@@ -75,18 +104,29 @@ export async function importTransactions(
 
   const toImportTransfers = force
     ? validatesTransfers
-    : validatesTransfers.filter((t) => !existingSet.has(`${t.description}|${t.date}`))
+    : validatesTransfers.filter((t) => {
+        const otherId = t.destination_account_id || t.origin_account_id
+        const isTransferDup = otherId && transferDupKeys.has(`${t.amount}|${t.date}|${otherId}`)
+        return !isTransferDup && !existingSet.has(`${t.description}|${t.date}`)
+      })
 
-  const duplicates = [...regular, ...validatesTransfers].filter((t) =>
-    existingSet.has(`${t.description}|${t.date}`)
-  )
+  const allDuplicates = [
+    ...regular.filter((t) => existingSet.has(`${t.description}|${t.date}`)),
+    ...validatesTransfers.filter((t) => {
+      const otherId = t.destination_account_id || t.origin_account_id
+      const isTxnDup = existingSet.has(`${t.description}|${t.date}`)
+      const isTransferDup = otherId && transferDupKeys.has(`${t.amount}|${t.date}|${otherId}`)
+      return isTxnDup || isTransferDup
+    }),
+  ]
 
   if (toImportRegular.length === 0 && toImportTransfers.length === 0) {
     return {
       error: "Todas as transações já estão cadastradas.",
       noCategory,
-      duplicates,
+      duplicates: allDuplicates,
       noDestiny: invalidTransfers,
+      transferDuplicates,
     }
   }
 
@@ -118,7 +158,7 @@ export async function importTransactions(
 
   const { error } = await supabase.from("transactions").insert(allToImport)
 
-  if (error) return { error: error.message, noCategory, duplicates, noDestiny: invalidTransfers }
+  if (error) return { error: error.message, noCategory, duplicates: allDuplicates, noDestiny: invalidTransfers, transferDuplicates }
 
   await supabase.from("import_logs").insert({
     user_id: user.id,
@@ -189,8 +229,8 @@ export async function importTransactions(
   revalidatePath("/dashboard")
   revalidatePath("/accounts")
 
-  if (noCategory.length > 0 || duplicates.length > 0 || invalidTransfers.length > 0) {
-    return { imported: toImportRegular.length + toImportTransfers.length, noCategory, duplicates, noDestiny: invalidTransfers }
+  if (noCategory.length > 0 || allDuplicates.length > 0 || invalidTransfers.length > 0) {
+    return { imported: toImportRegular.length + toImportTransfers.length, noCategory, duplicates: allDuplicates, noDestiny: invalidTransfers, transferDuplicates }
   }
 }
 

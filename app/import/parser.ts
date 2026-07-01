@@ -263,6 +263,9 @@ export function parseDate(value: string): string {
   const iso = value.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
   if (iso) return value;
 
+  const isoDateTime = value.match(/^(\d{4})-(\d{1,2})-(\d{1,2})\s/);
+  if (isoDateTime) return `${isoDateTime[1]}-${isoDateTime[2].padStart(2, "0")}-${isoDateTime[3].padStart(2, "0")}`;
+
   const yyyymmdd = value.match(/^(\d{4})(\d{2})(\d{2})/);
   if (yyyymmdd) return `${yyyymmdd[1]}-${yyyymmdd[2]}-${yyyymmdd[3]}`;
 
