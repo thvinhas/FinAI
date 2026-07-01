@@ -217,8 +217,8 @@ export default function ImportForm({
 
           let amount = 0
           if (colDebit >= 0 && colCredit >= 0) {
-            const debit = parseFloat((row[colDebit] ?? "").replace(",", "."))
-            const credit = parseFloat((row[colCredit] ?? "").replace(",", "."))
+            const debit = parseCurrency(row[colDebit] ?? "")
+            const credit = parseCurrency(row[colCredit] ?? "")
             amount = isCredit && credit > 0 ? credit : debit > 0 ? debit : credit || debit || 0
           }
           if (!amount) return null
