@@ -278,11 +278,30 @@ export function parseDate(value: string): string {
 }
 
 export function parseCurrency(value: string): number {
-  const cleaned = value
-    .replace(/[€]\s*/gi, "")
-    .replace(/\./g, "")
-    .replace(",", ".")
-    .trim();
+  let cleaned = value.replace(/[€\s]/gi, "").trim();
+  if (!cleaned) return 0;
+
+  const lastDot = cleaned.lastIndexOf(".");
+  const lastComma = cleaned.lastIndexOf(",");
+
+  if (lastDot > -1 && lastComma > -1) {
+    if (lastDot > lastComma) {
+      cleaned = cleaned.replace(/,/g, "");
+    } else {
+      // European format: 1.234,56
+      cleaned = cleaned.replace(/\./g, "").replace(",", ".");
+    }
+  } else if (lastDot > -1) {
+    const dotCount = cleaned.match(/\./g)?.length ?? 0;
+    if (dotCount > 1) {
+      cleaned = cleaned.replace(/\./g, "");
+    }
+    // else single dot: English decimal, keep as is
+  } else if (lastComma > -1) {
+    // European decimal: 1234,56
+    cleaned = cleaned.replace(",", ".");
+  }
+
   const num = parseFloat(cleaned);
   return isNaN(num) ? 0 : num;
 }
