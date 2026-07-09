@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server"
 import { redirect } from "next/navigation"
 import Header from "@/components/Header"
 import { buildKeywordMap } from "./categorizer"
+import { getLastImportDates } from "@/actions/accounts"
 import ImportForm from "./ImportForm"
 import type { Category, Account } from "@/types/database"
 
@@ -16,7 +17,7 @@ export default async function ImportPage() {
   } = await supabase.auth.getUser()
   if (!user) redirect("/login")
 
-  const [accountsResult, categoriesResult, txnsResult, ignoreKeywordsResult, transferMappingsResult] = await Promise.all([
+  const [accountsResult, categoriesResult, txnsResult, ignoreKeywordsResult, transferMappingsResult, lastImportDates] = await Promise.all([
     supabase
       .from("accounts")
       .select("*")
@@ -41,6 +42,7 @@ export default async function ImportPage() {
       .from("import_transfer_mappings")
       .select("*")
       .eq("user_id", user.id),
+    getLastImportDates(),
   ])
 
   const keywordMap = buildKeywordMap(txnsResult.data ?? [])
@@ -67,6 +69,7 @@ export default async function ImportPage() {
         keywordMap={keywordMap}
         initialIgnoreKeywords={initialIgnoreKeywords}
         initialTransferMappings={initialTransferMappings}
+        lastImportDates={lastImportDates}
       />
     </div>
     </>

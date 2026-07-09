@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef, useCallback, useEffect } from "react"
+import { useState, useRef, useCallback, useEffect, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import {
   Upload,
@@ -32,12 +32,14 @@ export default function ImportForm({
   keywordMap,
   initialIgnoreKeywords,
   initialTransferMappings = [],
+  lastImportDates = {},
 }: {
   accounts: Account[]
   categories: Category[]
   keywordMap: Record<string, string>
   initialIgnoreKeywords?: string[]
   initialTransferMappings?: TransferMapping[]
+  lastImportDates?: Record<string, string | null>
 }) {
   const router = useRouter()
   const inputRef = useRef<HTMLInputElement>(null)
@@ -73,6 +75,16 @@ export default function ImportForm({
   useEffect(() => {
     getTransferMappings().then(setTransferMappings)
   }, [])
+
+  const visibleTransactions = useMemo(() => {
+    if (!accountId) return transactions
+    const lastDate = lastImportDates[accountId]
+    if (!lastDate) return transactions
+    const datePart = lastDate.split("T")[0]
+    return transactions.filter((t) => t.date >= datePart)
+  }, [transactions, accountId, lastImportDates])
+
+  const hiddenCount = transactions.length - visibleTransactions.length
 
   const handleFile = useCallback(async (file: File) => {
     setError("")
@@ -300,18 +312,24 @@ export default function ImportForm({
     setProcessingLLM(false)
   }
 
-  function updateTransaction(index: number, updates: Partial<ParsedTransaction>) {
+  function updateTransaction(visibleIndex: number, updates: Partial<ParsedTransaction>) {
+    const visibleTx = visibleTransactions[visibleIndex]
+    if (!visibleTx) return
     setTransactions((prev) => {
-      const updated = prev.map((t, i) => (i === index ? { ...t, ...updates } : t))
-      const tx = updated[index]
+      const rawIndex = prev.findIndex(
+        (t) => t.date === visibleTx.date && t.description === visibleTx.description && t.amount === visibleTx.amount
+      )
+      if (rawIndex === -1) return prev
+      const updated = prev.map((t, i) => (i === rawIndex ? { ...t, ...updates } : t))
+      const tx = updated[rawIndex]
       if (
         tx.type === "transferencia" &&
         (tx.destination_account_id || tx.origin_account_id)
       ) {
-        const accountId = tx.destination_account_id || tx.origin_account_id
-        if (accountId) {
+        const targetAccountId = tx.destination_account_id || tx.origin_account_id
+        if (targetAccountId) {
           const transferType = tx.destination_account_id ? "destination" as const : "origin" as const
-          saveTransferMapping(tx.description, transferType, accountId).then(() => {
+          saveTransferMapping(tx.description, transferType, targetAccountId).then(() => {
             getTransferMappings().then(setTransferMappings)
           })
         }
@@ -320,12 +338,19 @@ export default function ImportForm({
     })
   }
 
-  function removeTransaction(index: number) {
-    setTransactions((prev) => prev.filter((_, i) => i !== index))
+  function removeTransaction(visibleIndex: number) {
+    const visibleTx = visibleTransactions[visibleIndex]
+    if (!visibleTx) return
+    setTransactions((prev) =>
+      prev.filter(
+        (t) =>
+          !(t.date === visibleTx.date && t.description === visibleTx.description && t.amount === visibleTx.amount)
+      )
+    )
   }
 
   function validateTransfers(): string | null {
-    const transfersNoAccount = transactions.filter(
+    const transfersNoAccount = visibleTransactions.filter(
       (t) => t.type === "transferencia" && !t.destination_account_id && !t.origin_account_id
     )
     if (transfersNoAccount.length > 0) {
@@ -336,12 +361,12 @@ export default function ImportForm({
   }
 
   async function handleImport() {
-    if (!accountId || transactions.length === 0) return
+    if (!accountId || visibleTransactions.length === 0) return
     const transferErr = validateTransfers()
     if (transferErr) { setError(transferErr); return }
     setImporting(true)
     setError("")
-    const result = await importTransactions(accountId, transactions)
+    const result = await importTransactions(accountId, visibleTransactions)
     if (result?.transferDuplicates?.length && !pendingTransferDuplicates) {
       setPendingTransferDuplicates(result.transferDuplicates)
       setError(`${result.transferDuplicates.length} transferência(s) duplicada(s) encontrada(s) entre as contas. Deseja importá-la(s) mesmo assim?`)
@@ -379,7 +404,7 @@ export default function ImportForm({
       return
     }
     router.push(
-      `/transactions?success=${result?.imported ?? transactions.length}+transações+importadas`
+      `/transactions?success=${result?.imported ?? visibleTransactions.length}+transações+importadas`
     )
   }
 
@@ -389,7 +414,7 @@ export default function ImportForm({
     setImporting(true)
     const transferErr = validateTransfers()
     if (transferErr) { setError(transferErr); setImporting(false); return }
-    const result = await importTransactions(accountId, transactions, true)
+    const result = await importTransactions(accountId, visibleTransactions, true)
     if (result?.noDestiny?.length) {
       setTransactions((prev) =>
         prev.filter((t) =>
@@ -483,9 +508,14 @@ export default function ImportForm({
           <div>
             <p className="text-sm font-medium text-white">{fileName}</p>
             <p className="text-xs text-zinc-500">
-              {transactions.length} transação
-              {transactions.length !== 1 ? "ões" : ""} encontrada
-              {transactions.length !== 1 ? "s" : ""}
+              {visibleTransactions.length} transação
+              {visibleTransactions.length !== 1 ? "ões" : ""} encontrada
+              {visibleTransactions.length !== 1 ? "s" : ""}
+              {hiddenCount > 0 && (
+                <span className="ml-1 text-zinc-600">
+                  ({hiddenCount} anteriores ao último import ignoradas)
+                </span>
+              )}
             </p>
           </div>
         </div>
@@ -627,7 +657,7 @@ export default function ImportForm({
       )}
 
       <ImportPreview
-        transactions={transactions}
+        transactions={visibleTransactions}
         categories={categories}
         accounts={accounts}
         accountId={accountId}
@@ -638,8 +668,13 @@ export default function ImportForm({
       <div className="sticky bottom-4 flex items-center justify-between rounded-xl border border-zinc-800 bg-zinc-900 p-4">
         <div>
           <p className="text-sm text-zinc-400">
-            {transactions.length} transação
-            {transactions.length !== 1 ? "ões" : ""}
+            {visibleTransactions.length} transação
+            {visibleTransactions.length !== 1 ? "ões" : ""}
+            {hiddenCount > 0 && (
+              <span className="ml-2 text-xs text-zinc-600">
+                ({hiddenCount} ocultadas)
+              </span>
+            )}
             {accountId &&
               ` → ${accounts.find((a) => a.id === accountId)?.name ?? ""}`}
           </p>
@@ -652,7 +687,7 @@ export default function ImportForm({
         <button
           onClick={handleImport}
           disabled={
-            !accountId || transactions.length === 0 || importing
+            !accountId || visibleTransactions.length === 0 || importing
           }
           className="flex items-center gap-2 rounded-lg bg-indigo-600 px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
         >
@@ -663,7 +698,7 @@ export default function ImportForm({
           )}
           {importing
             ? "Importando..."
-            : `Importar ${transactions.length}`}
+            : `Importar ${visibleTransactions.length}`}
         </button>
       </div>
     </div>
