@@ -15,10 +15,10 @@ set color = (
 from numbered n
 where a.id = n.id;
 
--- Categorias (24 cores)
+-- Categorias (24 cores) — separado por tipo (receita vs despesa)
 with numbered as (
-  select id, user_id,
-    row_number() over (partition by user_id order by created_at) - 1 as idx
+  select id, user_id, type,
+    row_number() over (partition by user_id, type order by created_at) - 1 as idx
   from categories
   where archived_at is null
 )

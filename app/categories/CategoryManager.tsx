@@ -46,14 +46,24 @@ export default function CategoryManager({
     [categories, archivedCategories]
   );
 
-  const usedColors = useMemo(
-    () => new Set(allCategories.map((c) => c.color)),
-    [allCategories]
-  );
+  const usedColorsByType = useMemo(() => {
+    const map: Record<string, Set<string>> = { receita: new Set(), despesa: new Set() };
+    for (const cat of allCategories) {
+      map[cat.type]?.add(cat.color);
+    }
+    return map;
+  }, [allCategories]);
+
+  const usedColors = usedColorsByType[type];
 
   const suggestedColor = useMemo(
     () => COLORS.find((c) => !usedColors.has(c)) ?? COLORS[0],
     [usedColors]
+  );
+
+  const editingCategory = useMemo(
+    () => allCategories.find((c) => c.id === editingId),
+    [allCategories, editingId]
   );
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -231,7 +241,11 @@ export default function CategoryManager({
                                 />
                                 <div className="flex flex-wrap gap-2">
                                   {(() => {
-                                    const editUsed = new Set(allCategories.map((cc) => cc.color));
+                                    const editUsed = new Set(
+                                      allCategories
+                                        .filter((cc) => cc.type === editingCategory?.type)
+                                        .map((cc) => cc.color)
+                                    );
                                     editUsed.delete(editColor);
                                     return COLORS.map((c) => {
                                       const used = editUsed.has(c);
