@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { createAccount, updateAccount } from "@/actions/accounts";
 import Input from "@/components/Input";
@@ -15,12 +15,25 @@ const COLORS = [
 
 export default function AccountForm({
   initialData,
+  existingColors = [],
 }: {
   initialData?: Account;
+  existingColors?: string[];
 }) {
   const router = useRouter();
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
+
+  const usedColors = useMemo(() => {
+    const set = new Set(existingColors);
+    if (initialData?.color) set.delete(initialData.color);
+    return set;
+  }, [existingColors, initialData?.color]);
+
+  const suggestedColor = useMemo(
+    () => COLORS.find((c) => !usedColors.has(c)) ?? COLORS[0],
+    [usedColors]
+  );
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -79,22 +92,26 @@ export default function AccountForm({
 
       <div>
         <label className="mb-1 block text-sm text-zinc-400">Cor</label>
-        <div className="flex gap-2">
-          {COLORS.map((c) => (
-            <label key={c} className="cursor-pointer">
-              <input
-                type="radio"
-                name="color"
-                value={c}
-                defaultChecked={c === (initialData?.color ?? "#6366f1")}
-                className="sr-only peer"
-              />
-              <div
-                className="h-8 w-8 rounded-full ring-offset-2 ring-offset-zinc-950 peer-checked:ring-2 peer-checked:ring-white"
-                style={{ backgroundColor: c }}
-              />
-            </label>
-          ))}
+        <div className="flex flex-wrap gap-2">
+          {COLORS.map((c) => {
+            const used = usedColors.has(c);
+            return (
+              <label key={c} className="group cursor-pointer">
+                <input
+                  type="radio"
+                  name="color"
+                  value={c}
+                  defaultChecked={c === (initialData?.color ?? suggestedColor)}
+                  className="sr-only peer"
+                />
+                <div
+                  className={`h-8 w-8 rounded-full ring-offset-2 ring-offset-zinc-950 peer-checked:ring-2 peer-checked:ring-white ${used ? "ring-2 ring-red-500/70" : ""}`}
+                  style={{ backgroundColor: c }}
+                  title={used ? "Cor já utilizada" : undefined}
+                />
+              </label>
+            );
+          })}
         </div>
       </div>
 

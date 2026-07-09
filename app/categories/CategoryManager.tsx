@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { createCategory, archiveCategory, restoreCategory, updateCategory, seedDefaultCategories } from "@/actions/categories";
 import { Archive, Pencil, RotateCcw, Sparkles } from "lucide-react";
@@ -40,6 +40,21 @@ export default function CategoryManager({
   const [editColor, setEditColor] = useState("");
   const [editPending, setEditPending] = useState(false);
   const [archiveError, setArchiveError] = useState<string | null>(null);
+
+  const allCategories = useMemo(
+    () => [...categories, ...(archivedCategories ?? [])],
+    [categories, archivedCategories]
+  );
+
+  const usedColors = useMemo(
+    () => new Set(allCategories.map((c) => c.color)),
+    [allCategories]
+  );
+
+  const suggestedColor = useMemo(
+    () => COLORS.find((c) => !usedColors.has(c)) ?? COLORS[0],
+    [usedColors]
+  );
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -98,22 +113,26 @@ export default function CategoryManager({
               disabled={pending}
             />
             <div className="flex flex-wrap gap-2">
-              {COLORS.map((c) => (
-                <label key={c} className={`cursor-pointer ${pending ? "opacity-50 pointer-events-none" : ""}`}>
-                  <input
-                    type="radio"
-                    name="color"
-                    value={c}
-                    defaultChecked={c === "#6366f1"}
-                    className="sr-only peer"
-                    disabled={pending}
-                  />
-                  <div
-                    className="h-8 w-8 rounded-full ring-offset-2 ring-offset-zinc-950 peer-checked:ring-2 peer-checked:ring-white"
-                    style={{ backgroundColor: c }}
-                  />
-                </label>
-              ))}
+              {COLORS.map((c) => {
+                const used = usedColors.has(c);
+                return (
+                  <label key={c} className={`group cursor-pointer ${pending ? "opacity-50 pointer-events-none" : ""}`}>
+                    <input
+                      type="radio"
+                      name="color"
+                      value={c}
+                      defaultChecked={c === suggestedColor}
+                      className="sr-only peer"
+                      disabled={pending}
+                    />
+                    <div
+                      className={`h-8 w-8 rounded-full ring-offset-2 ring-offset-zinc-950 peer-checked:ring-2 peer-checked:ring-white ${used ? "ring-2 ring-red-500/70" : ""}`}
+                      style={{ backgroundColor: c }}
+                      title={used ? "Cor já utilizada" : undefined}
+                    />
+                  </label>
+                );
+              })}
             </div>
             <button
               type="submit"
@@ -211,22 +230,30 @@ export default function CategoryManager({
                                   disabled={editPending}
                                 />
                                 <div className="flex flex-wrap gap-2">
-                                  {COLORS.map((c) => (
-                                    <label key={c} className={`cursor-pointer ${editPending ? "pointer-events-none opacity-50" : ""}`}>
-                                      <input
-                                        type="radio"
-                                        name="color"
-                                        value={c}
-                                        defaultChecked={c === editColor}
-                                        className="sr-only peer"
-                                        disabled={editPending}
-                                      />
-                                      <div
-                                        className="h-8 w-8 rounded-full ring-offset-2 ring-offset-zinc-950 peer-checked:ring-2 peer-checked:ring-white"
-                                        style={{ backgroundColor: c }}
-                                      />
-                                    </label>
-                                  ))}
+                                  {(() => {
+                                    const editUsed = new Set(allCategories.map((cc) => cc.color));
+                                    editUsed.delete(editColor);
+                                    return COLORS.map((c) => {
+                                      const used = editUsed.has(c);
+                                      return (
+                                        <label key={c} className={`group cursor-pointer ${editPending ? "pointer-events-none opacity-50" : ""}`}>
+                                          <input
+                                            type="radio"
+                                            name="color"
+                                            value={c}
+                                            defaultChecked={c === editColor}
+                                            className="sr-only peer"
+                                            disabled={editPending}
+                                          />
+                                          <div
+                                            className={`h-8 w-8 rounded-full ring-offset-2 ring-offset-zinc-950 peer-checked:ring-2 peer-checked:ring-white ${used ? "ring-2 ring-red-500/70" : ""}`}
+                                            style={{ backgroundColor: c }}
+                                            title={used ? "Cor já utilizada" : undefined}
+                                          />
+                                        </label>
+                                      );
+                                    });
+                                  })()}
                                 </div>
                                 <div className="flex gap-2">
                                   <button
