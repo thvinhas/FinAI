@@ -1,10 +1,21 @@
 "use client"
 
-import { Trash2, ArrowRight, ArrowLeft } from "lucide-react"
+import { useState, useEffect, useMemo } from "react"
+import { Trash2, ArrowRight, ArrowLeft, Plus, X } from "lucide-react"
 import SearchSelect from "@/components/SearchSelect"
+import { createCategory } from "@/actions/categories"
 import type { ParsedTransaction } from "@/types/import"
 import type { Category, Account } from "@/types/database"
 import { formatCurrency } from "@/lib/format"
+
+const CATEGORY_COLORS = [
+  "#6366f1", "#10b981", "#f59e0b", "#ef4444",
+  "#3b82f6", "#ec4899", "#8b5cf6", "#14b8a6",
+  "#f97316", "#06b6d4", "#22c55e", "#a855f7",
+  "#e11d48", "#0ea5e9", "#d946ef", "#84cc16",
+  "#f43f5e", "#64748b", "#fb923c", "#2dd4bf",
+  "#eab308", "#475569", "#a78bfa", "#34d399",
+]
 
 export default function ImportPreview({
   transactions,
@@ -21,6 +32,47 @@ export default function ImportPreview({
   onUpdate: (index: number, updates: Partial<ParsedTransaction>) => void
   onRemove: (index: number) => void
 }) {
+  const [localCategories, setLocalCategories] = useState(categories)
+  const [addCategoryFor, setAddCategoryFor] = useState<number | null>(null)
+  const [newCategoryName, setNewCategoryName] = useState("")
+
+  useEffect(() => {
+    setLocalCategories(categories)
+  }, [categories])
+
+  async function handleAddCategory(e: React.FormEvent, rowIndex: number, catType: string) {
+    e.preventDefault()
+    if (!newCategoryName.trim()) return
+
+    const usedColors = new Set(
+      localCategories.filter((c) => c.type === catType).map((c) => c.color)
+    )
+    const suggestedColor = CATEGORY_COLORS.find((c) => !usedColors.has(c)) ?? CATEGORY_COLORS[0]
+
+    const formData = new FormData()
+    formData.set("name", newCategoryName.trim())
+    formData.set("type", catType)
+    formData.set("color", suggestedColor)
+
+    const result = await createCategory(formData)
+    if (result?.error) return
+
+    const newCat: Category = {
+      id: result.id,
+      user_id: "",
+      name: newCategoryName.trim(),
+      type: catType as "receita" | "despesa",
+      color: suggestedColor,
+      icon: "tag",
+      created_at: new Date().toISOString(),
+      archived_at: null,
+    }
+
+    setLocalCategories((prev) => [...prev, newCat])
+    onUpdate(rowIndex, { category_id: result.id })
+    setAddCategoryFor(null)
+    setNewCategoryName("")
+  }
   if (transactions.length === 0) {
     return (
       <p className="py-8 text-center text-sm text-zinc-500">
@@ -183,24 +235,62 @@ export default function ImportPreview({
               ) : (
                 <>
                   <span className="text-xs text-zinc-500 sm:hidden">Categoria </span>
-                  <SearchSelect
-                    value={tx.category_id ?? ""}
-                    onChange={(val: string) =>
-                      onUpdate(i, { category_id: val || null })
-                    }
-                    placeholder="Sem categoria"
-                    searchPlaceholder="Buscar categoria..."
-                    options={[
-                      { value: "", label: "Sem categoria" },
-                      ...categories
-                        .filter((c) => c.type === tx.type)
-                        .map((c) => ({
-                          value: c.id,
-                          label: c.name,
-                          color: c.color,
-                        })),
-                    ]}
-                  />
+                  <div className="flex items-center gap-1">
+                    <SearchSelect
+                      value={tx.category_id ?? ""}
+                      onChange={(val: string) =>
+                        onUpdate(i, { category_id: val || null })
+                      }
+                      placeholder="Sem categoria"
+                      searchPlaceholder="Buscar categoria..."
+                      onAddLabel="+ Adicionar"
+                      onAdd={() => {
+                        setAddCategoryFor(i)
+                        setNewCategoryName("")
+                      }}
+                      options={[
+                        { value: "", label: "Sem categoria" },
+                        ...localCategories
+                          .filter((c) => c.type === tx.type)
+                          .map((c) => ({
+                            value: c.id,
+                            label: c.name,
+                            color: c.color,
+                          })),
+                      ]}
+                    />
+                  </div>
+                  {addCategoryFor === i && (
+                    <form
+                      onSubmit={(e) => handleAddCategory(e, i, tx.type)}
+                      className="mt-1 flex items-center gap-1"
+                    >
+                      <input
+                        type="text"
+                        value={newCategoryName}
+                        onChange={(e) => setNewCategoryName(e.target.value)}
+                        placeholder="Nome"
+                        autoFocus
+                        className="flex-1 rounded border border-zinc-700 bg-zinc-900/50 px-2 py-1 text-xs text-white outline-none placeholder:text-zinc-500 focus:border-indigo-500"
+                      />
+                      <button
+                        type="submit"
+                        className="rounded bg-indigo-600 px-2 py-1 text-xs text-white hover:bg-indigo-700"
+                      >
+                        <Plus size={12} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAddCategoryFor(null)
+                          setNewCategoryName("")
+                        }}
+                        className="rounded border border-zinc-700 px-2 py-1 text-xs text-zinc-400 hover:text-white"
+                      >
+                        <X size={12} />
+                      </button>
+                    </form>
+                  )}
                 </>
               )}
             </div>

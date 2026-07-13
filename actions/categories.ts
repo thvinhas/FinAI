@@ -30,15 +30,16 @@ export async function createCategory(formData: FormData) {
   } = await supabase.auth.getUser();
   if (!user) return { error: "Não autenticado" };
 
-  const { error } = await supabase.from("categories").insert({
+  const { data, error } = await supabase.from("categories").insert({
     user_id: user.id,
     name: formData.get("name"),
     type: formData.get("type"),
     color: formData.get("color") || "#6366f1",
     icon: formData.get("icon") || "tag",
-  });
+  }).select("id").single();
   if (error) return { error: error.message };
   revalidatePath("/categories");
+  return { id: data.id };
 }
 
 export async function archiveCategory(id: string) {

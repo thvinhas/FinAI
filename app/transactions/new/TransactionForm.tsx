@@ -1,13 +1,24 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { createTransaction, createTransfer, suggestCategory } from "@/actions/transactions";
+import { createCategory } from "@/actions/categories";
+import { Plus, X } from "lucide-react";
 import Input from "@/components/Input";
 import SearchSelect from "@/components/SearchSelect";
 import CurrencyInput from "@/components/CurrencyInput";
 import type { Category, Account, Transaction } from "@/types/database";
 import { updateTransaction } from "@/actions/transactions";
+
+const CATEGORY_COLORS = [
+  "#6366f1", "#10b981", "#f59e0b", "#ef4444",
+  "#3b82f6", "#ec4899", "#8b5cf6", "#14b8a6",
+  "#f97316", "#06b6d4", "#22c55e", "#a855f7",
+  "#e11d48", "#0ea5e9", "#d946ef", "#84cc16",
+  "#f43f5e", "#64748b", "#fb923c", "#2dd4bf",
+  "#eab308", "#475569", "#a78bfa", "#34d399",
+];
 
 type FormType = "receita" | "despesa" | "transferencia";
 
@@ -28,6 +39,53 @@ export default function TransactionForm({
   const [pending, setPending] = useState(false);
   const [description, setDescription] = useState(initialData?.description ?? "");
   const [categoryId, setCategoryId] = useState(initialData?.category_id ?? "");
+  const [localCategories, setLocalCategories] = useState(categories);
+  const [showAddCategory, setShowAddCategory] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState("");
+
+  useEffect(() => {
+    setLocalCategories(categories);
+  }, [categories]);
+
+  const usedCategoryColors = useMemo(() => {
+    return new Set(
+      localCategories.filter((c) => c.type === type).map((c) => c.color)
+    );
+  }, [localCategories, type]);
+
+  const suggestedCategoryColor = useMemo(
+    () => CATEGORY_COLORS.find((c) => !usedCategoryColors.has(c)) ?? CATEGORY_COLORS[0],
+    [usedCategoryColors]
+  );
+
+  async function handleAddCategory(e: React.FormEvent) {
+    e.preventDefault();
+    if (!newCategoryName.trim()) return;
+
+    const formData = new FormData();
+    formData.set("name", newCategoryName.trim());
+    formData.set("type", type);
+    formData.set("color", suggestedCategoryColor);
+
+    const result = await createCategory(formData);
+    if (result?.error) return;
+
+    const newCat: Category = {
+      id: result.id,
+      user_id: "",
+      name: newCategoryName.trim(),
+      type: type as "receita" | "despesa",
+      color: suggestedCategoryColor,
+      icon: "tag",
+      created_at: new Date().toISOString(),
+      archived_at: null,
+    };
+
+    setLocalCategories((prev) => [...prev, newCat]);
+    setCategoryId(result.id);
+    setShowAddCategory(false);
+    setNewCategoryName("");
+  }
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -67,7 +125,7 @@ export default function TransactionForm({
     return () => clearTimeout(timer);
   }, [description]);
 
-  const filteredCategories = categories.filter((c) => c.type === type);
+  const filteredCategories = localCategories.filter((c) => c.type === type);
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
@@ -218,6 +276,8 @@ export default function TransactionForm({
               required
               placeholder="Selecione uma categoria"
               searchPlaceholder="Buscar categoria..."
+              onAddLabel="+ Adicionar categoria"
+              onAdd={() => setShowAddCategory(true)}
               options={
                 filteredCategories.length > 0
                   ? filteredCategories.map((c) => ({
@@ -228,6 +288,34 @@ export default function TransactionForm({
                   : [{ value: "", label: "Nenhuma categoria disponível" }]
               }
             />
+            {showAddCategory && (
+              <form onSubmit={handleAddCategory} className="mt-2 flex items-center gap-2">
+                <input
+                  type="text"
+                  value={newCategoryName}
+                  onChange={(e) => setNewCategoryName(e.target.value)}
+                  placeholder="Nome da nova categoria"
+                  autoFocus
+                  className="flex-1 rounded-lg border border-zinc-700 bg-zinc-900/50 px-3 py-2 text-sm text-white outline-none placeholder:text-zinc-500 focus:border-indigo-500"
+                />
+                <button
+                  type="submit"
+                  className="rounded-lg bg-indigo-600 px-3 py-2 text-xs font-medium text-white hover:bg-indigo-700"
+                >
+                  <Plus size={14} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowAddCategory(false);
+                    setNewCategoryName("");
+                  }}
+                  className="rounded-lg border border-zinc-700 px-3 py-2 text-xs text-zinc-400 hover:text-white"
+                >
+                  <X size={14} />
+                </button>
+              </form>
+            )}
           </div>
           <div>
             <label className="mb-1.5 block text-sm font-medium text-zinc-400">Data</label>
