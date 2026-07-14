@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState } from "react";
 import {
   flexRender,
   getCoreRowModel,
@@ -19,32 +19,29 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { ArrowUpDown, ChevronLeft, ChevronRight, Search } from "lucide-react";
+import { ArrowUpDown, ChevronLeft, ChevronRight } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface DataTableProps<TData> {
   columns: ColumnDef<TData>[];
   data: TData[];
-  searchKey?: string;
-  searchPlaceholder?: string;
+  search?: string;
   pageSize?: number;
 }
 
 export default function DataTable<TData>({
   columns,
   data,
-  searchKey,
-  searchPlaceholder = "Buscar...",
+  search = "",
   pageSize = 10,
 }: DataTableProps<TData>) {
   const [sorting, setSorting] = useState<SortingState>([]);
-  const [globalFilter, setGlobalFilter] = useState("");
 
   const table = useReactTable({
     data,
     columns,
-    state: { sorting, globalFilter },
+    state: { sorting, globalFilter: search },
     onSortingChange: setSorting,
-    onGlobalFilterChange: setGlobalFilter,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
@@ -56,45 +53,30 @@ export default function DataTable<TData>({
   const totalPages = table.getPageCount();
   const currentPage = table.getState().pagination.pageIndex;
   const from = currentPage * pageSize + 1;
-  const to = Math.min((currentPage + 1) * pageSize, data.length);
+  const to = Math.min((currentPage + 1) * pageSize, table.getFilteredRowModel().rows.length);
 
   return (
     <div>
-      {searchKey && (
-        <div className="relative mb-4">
-          <Search
-            size={16}
-            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500"
-          />
-          <input
-            value={globalFilter}
-            onChange={(e) => setGlobalFilter(e.target.value)}
-            placeholder={searchPlaceholder}
-            className="w-full rounded-lg border border-zinc-800 bg-zinc-900/50 py-2 pl-9 pr-3 text-sm text-white placeholder:text-zinc-500 focus:border-indigo-500 focus:outline-none"
-          />
-        </div>
-      )}
-
-      <div className="overflow-x-auto rounded-xl border border-zinc-800">
+      <div className="overflow-x-auto rounded-xl border border-border bg-surface">
         <Table>
           <TableHeader>
             {table.getHeaderGroups().map((headerGroup) => (
-              <TableRow key={headerGroup.id} className="bg-zinc-900">
+              <TableRow key={headerGroup.id} className="border-border hover:bg-transparent">
                 {headerGroup.headers.map((header) => (
                   <TableHead
                     key={header.id}
-                    className="px-3 py-3 text-xs font-medium text-zinc-400 sm:px-4 sm:text-sm"
+                    className="px-4 py-3.5 text-xs font-semibold text-muted-foreground"
                   >
                     {header.isPlaceholder ? null : (
                       <button
-                        className="flex items-center gap-1 hover:text-white"
+                        className="flex items-center gap-1.5 hover:text-foreground"
                         onClick={header.column.getToggleSortingHandler()}
                       >
                         {flexRender(
                           header.column.columnDef.header,
                           header.getContext()
                         )}
-                        <ArrowUpDown size={13} className="text-zinc-600" />
+                        <ArrowUpDown size={13} className="text-faint" />
                       </button>
                     )}
                   </TableHead>
@@ -104,25 +86,19 @@ export default function DataTable<TData>({
           </TableHeader>
           <TableBody>
             {table.getRowModel().rows.length === 0 ? (
-              <TableRow>
+              <TableRow className="hover:bg-transparent">
                 <TableCell
                   colSpan={columns.length}
-                  className="px-4 py-12 text-center text-sm text-zinc-500"
+                  className="px-4 py-12 text-center text-sm text-faint"
                 >
                   Nenhum resultado encontrado.
                 </TableCell>
               </TableRow>
             ) : (
               table.getRowModel().rows.map((row) => (
-                <TableRow
-                  key={row.id}
-                  className="border-zinc-800 bg-zinc-950 hover:bg-zinc-900/50"
-                >
+                <TableRow key={row.id} className="border-border">
                   {row.getVisibleCells().map((cell) => (
-                    <TableCell
-                      key={cell.id}
-                      className="px-3 py-3 sm:px-4"
-                    >
+                    <TableCell key={cell.id} className="px-4 py-3.5">
                       {flexRender(
                         cell.column.columnDef.cell,
                         cell.getContext()
@@ -137,15 +113,15 @@ export default function DataTable<TData>({
       </div>
 
       {totalPages > 0 && (
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm text-zinc-400">
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground">
           <span>
-            {from}–{to} de {data.length}
+            {from}–{to} de {table.getFilteredRowModel().rows.length}
           </span>
           <div className="flex items-center gap-1.5">
             <button
               onClick={() => table.previousPage()}
               disabled={!table.getCanPreviousPage()}
-              className="flex items-center gap-1 rounded-lg border border-zinc-800 px-3 py-1.5 transition-colors hover:bg-zinc-800 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+              className="flex items-center gap-1 rounded-lg border border-border px-3 py-1.5 transition-colors hover:bg-surface2 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
             >
               <ChevronLeft size={15} />
               <span className="hidden sm:inline">Anterior</span>
@@ -166,11 +142,12 @@ export default function DataTable<TData>({
                 <button
                   key={pageNum}
                   onClick={() => table.setPageIndex(pageNum)}
-                  className={`min-w-[32px] rounded-lg px-2 py-1.5 transition-colors ${
+                  className={cn(
+                    "min-w-8 rounded-lg px-2 py-1.5 transition-colors",
                     pageNum === currentPage
-                      ? "bg-indigo-600 text-white"
-                      : "hover:bg-zinc-800 hover:text-white"
-                  }`}
+                      ? "bg-accent text-background font-semibold"
+                      : "hover:bg-surface2 hover:text-foreground"
+                  )}
                 >
                   {pageNum + 1}
                 </button>
@@ -180,7 +157,7 @@ export default function DataTable<TData>({
             <button
               onClick={() => table.nextPage()}
               disabled={!table.getCanNextPage()}
-              className="flex items-center gap-1 rounded-lg border border-zinc-800 px-3 py-1.5 transition-colors hover:bg-zinc-800 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+              className="flex items-center gap-1 rounded-lg border border-border px-3 py-1.5 transition-colors hover:bg-surface2 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
             >
               <span className="hidden sm:inline">Próximo</span>
               <ChevronRight size={15} />

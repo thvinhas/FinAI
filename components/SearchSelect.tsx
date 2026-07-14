@@ -46,13 +46,15 @@ export default function SearchSelect({
 }) {
   const [open, setOpen] = React.useState(false);
   const [selected, setSelected] = React.useState(value ?? defaultValue ?? "");
+  const [prevValue, setPrevValue] = React.useState(value);
   const hiddenRef = React.useRef<HTMLInputElement>(null);
 
   const selectedOption = options.find((o) => o.value === selected);
 
-  React.useEffect(() => {
-    if (value !== undefined) setSelected(value);
-  }, [value]);
+  if (value !== undefined && value !== prevValue) {
+    setPrevValue(value);
+    setSelected(value);
+  }
 
   const handleSelect = (v: string) => {
     setSelected(v);

@@ -1,11 +1,23 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import { Geist } from "next/font/google";
+import { Manrope, Inter } from "next/font/google";
 import { cn } from "@/lib/utils";
 import FloatingActionButton from "@/components/FloatingActionButton";
 import ErrorBoundary from "@/components/ErrorBoundary";
+import { ThemeProvider } from "@/components/ThemeProvider";
 
-const geist = Geist({subsets:['latin'],variable:'--font-sans'});
+const manrope = Manrope({
+  subsets: ["latin"],
+  weight: ["500", "600", "700", "800"],
+  variable: "--font-heading",
+});
+const inter = Inter({
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+  variable: "--font-sans",
+});
+
+const THEME_INIT_SCRIPT = `(function(){try{var t=localStorage.getItem("theme");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}})()`;
 
 export const metadata: Metadata = {
   title: "FinApp - Controle Financeiro",
@@ -22,12 +34,22 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="pt-PT" className={cn("dark font-sans", geist.variable)}>
-      <body className="min-h-screen bg-zinc-950 text-zinc-100 antialiased">
-        <ErrorBoundary>
-          {children}
-        </ErrorBoundary>
-        <FloatingActionButton />
+    <html
+      lang="pt-PT"
+      data-theme="dark"
+      suppressHydrationWarning
+      className={cn("font-sans", manrope.variable, inter.variable)}
+    >
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+      </head>
+      <body className="min-h-screen bg-background text-foreground antialiased">
+        <ThemeProvider defaultTheme="dark">
+          <ErrorBoundary>
+            {children}
+          </ErrorBoundary>
+          <FloatingActionButton />
+        </ThemeProvider>
       </body>
     </html>
   );

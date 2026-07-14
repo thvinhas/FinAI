@@ -5,22 +5,17 @@ import { revalidatePath } from "next/cache";
 
 export async function getCategories() {
   const supabase = await createClient();
-  const { data } = await supabase
-    .from("categories")
-    .select("*")
-    .is("archived_at", null)
-    .order("name");
-  return data ?? [];
-}
+  const [{ data: categories }, { data: txns }] = await Promise.all([
+    supabase.from("categories").select("*").is("archived_at", null).order("name"),
+    supabase.from("transactions").select("category_id").not("category_id", "is", null),
+  ]);
 
-export async function getArchivedCategories() {
-  const supabase = await createClient();
-  const { data } = await supabase
-    .from("categories")
-    .select("*")
-    .not("archived_at", "is", null)
-    .order("name");
-  return data ?? [];
+  const counts: Record<string, number> = {};
+  for (const t of txns ?? []) {
+    if (t.category_id) counts[t.category_id] = (counts[t.category_id] ?? 0) + 1;
+  }
+
+  return (categories ?? []).map((c) => ({ ...c, count: counts[c.id] ?? 0 }));
 }
 
 export async function createCategory(formData: FormData) {
@@ -41,39 +36,6 @@ export async function createCategory(formData: FormData) {
   revalidatePath("/categories");
 }
 
-export async function archiveCategory(id: string) {
-  const supabase = await createClient();
-
-  const { count } = await supabase
-    .from("transactions")
-    .select("*", { count: "exact", head: true })
-    .eq("category_id", id);
-
-  if (count && count > 0) {
-    return {
-      error:
-        "Esta categoria possui transações vinculadas. Reassocie as transações a outra categoria antes de arquivar.",
-    };
-  }
-
-  const { error } = await supabase
-    .from("categories")
-    .update({ archived_at: new Date().toISOString() })
-    .eq("id", id);
-  if (error) return { error: error.message };
-  revalidatePath("/categories");
-}
-
-export async function restoreCategory(id: string) {
-  const supabase = await createClient();
-  const { error } = await supabase
-    .from("categories")
-    .update({ archived_at: null })
-    .eq("id", id);
-  if (error) return { error: error.message };
-  revalidatePath("/categories");
-}
-
 export async function updateCategory(id: string, formData: FormData) {
   const supabase = await createClient();
   const { error } = await supabase
@@ -85,6 +47,31 @@ export async function updateCategory(id: string, formData: FormData) {
     .eq("id", id);
   if (error) return { error: error.message };
   revalidatePath("/categories");
+}
+
+export async function deleteCategory(id: string, reassignToId?: string) {
+  const supabase = await createClient();
+
+  const { count } = await supabase
+    .from("transactions")
+    .select("*", { count: "exact", head: true })
+    .eq("category_id", id);
+
+  if (count && count > 0) {
+    if (!reassignToId) {
+      return { needsReassign: true as const, count };
+    }
+    const { error: reassignError } = await supabase
+      .from("transactions")
+      .update({ category_id: reassignToId })
+      .eq("category_id", id);
+    if (reassignError) return { error: reassignError.message };
+  }
+
+  const { error } = await supabase.from("categories").delete().eq("id", id);
+  if (error) return { error: error.message };
+  revalidatePath("/categories");
+  revalidatePath("/transactions");
 }
 
 const DEFAULT_CATEGORIES: { name: string; type: "receita" | "despesa"; color: string }[] = [

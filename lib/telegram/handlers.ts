@@ -2,7 +2,7 @@ import { Context } from "grammy"
 import { createAdminClient } from "../supabase/admin"
 import type { Account, Category } from "@/types/database"
 import { extractFromPhoto } from "./receipt"
-import { classifyWithLLM } from "@/app/import/llm"
+import { classifyWithLLM } from "@/app/(app)/import/llm"
 
 function getSupabase() {
   return createAdminClient()

@@ -3,7 +3,7 @@
 import { createClient } from "@/lib/supabase/server"
 import { revalidatePath } from "next/cache"
 import type { ParsedTransaction } from "@/types/import"
-import { extractFromPDFText, classifyBatchWithLLM } from "@/app/import/llm"
+import { extractFromPDFText, classifyBatchWithLLM } from "@/app/(app)/import/llm"
 
 export async function importTransactions(
   accountId: string,

@@ -44,15 +44,15 @@ export default function TelegramSettingsCard({
   }
 
   return (
-    <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-4">
-      <div className="mb-3 flex items-center gap-2">
-        <Bot size={16} className="text-indigo-400" />
-        <h2 className="text-sm font-medium text-white">Telegram</h2>
+    <div className="flex flex-col gap-3.5 rounded-2xl border border-border bg-surface p-5.5">
+      <div className="flex items-center gap-2.5">
+        <Bot size={17} className="text-accent" />
+        <h2 className="text-[15px] font-bold">Telegram</h2>
       </div>
 
       {!link && (
         <>
-          <p className="mb-3 text-xs text-zinc-500">
+          <p className="text-[12.5px] text-muted-foreground">
             Vincule sua conta do Telegram para registrar despesas enviando fotos
             de recibos ou mensagens de texto.
           </p>
@@ -60,7 +60,7 @@ export default function TelegramSettingsCard({
             type="button"
             onClick={handleGenerate}
             disabled={loading}
-            className="inline-flex items-center gap-1.5 rounded-md bg-indigo-600 px-3 py-1.5 text-xs text-white transition-colors hover:bg-indigo-500 disabled:opacity-50"
+            className="inline-flex w-fit items-center gap-1.5 rounded-[10px] bg-accent px-3.5 py-2 text-xs font-bold text-background disabled:opacity-50"
           >
             <Link2 size={14} />
             Gerar Token
@@ -70,30 +70,30 @@ export default function TelegramSettingsCard({
 
       {link && !link.chat_id && (
         <>
-          <p className="mb-2 text-xs text-zinc-400">
+          <p className="text-xs text-muted-foreground">
             Envie este token para o bot no Telegram:
           </p>
-          <div className="mb-2 flex items-center gap-2">
-            <code className="rounded-md bg-zinc-800 px-3 py-1.5 text-sm text-green-400">
+          <div className="flex items-center gap-2">
+            <code className="rounded-lg bg-surface2 px-3 py-1.5 text-sm text-positive">
               {link.token}
             </code>
             <button
               type="button"
               onClick={handleCopy}
-              className="rounded-md p-1.5 text-zinc-500 transition-colors hover:bg-zinc-800 hover:text-zinc-300"
+              className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-surface2 hover:text-foreground"
             >
-              {copied ? <Check size={14} className="text-green-400" /> : <Copy size={14} />}
+              {copied ? <Check size={14} className="text-positive" /> : <Copy size={14} />}
             </button>
           </div>
-          <p className="text-xs text-zinc-600">
+          <p className="text-xs text-faint">
             Abra o bot e envie:{" "}
-            <code className="text-indigo-400">/link {link.token}</code>
+            <code className="text-accent">/link {link.token}</code>
           </p>
           <button
             type="button"
             onClick={handleUnlink}
             disabled={loading}
-            className="mt-3 inline-flex items-center gap-1.5 text-xs text-zinc-600 transition-colors hover:text-red-400"
+            className="inline-flex w-fit items-center gap-1.5 text-xs font-semibold text-muted-foreground transition-colors hover:text-negative"
           >
             <Unlink size={12} />
             Cancelar
@@ -102,25 +102,23 @@ export default function TelegramSettingsCard({
       )}
 
       {link?.chat_id && (
-        <>
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-green-400">✅ Vinculado</p>
-              <p className="mt-0.5 text-xs text-zinc-500">
-                Despesas podem ser registradas via Telegram.
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={handleUnlink}
-              disabled={loading}
-              className="inline-flex items-center gap-1.5 rounded-md border border-zinc-700 px-2.5 py-1 text-xs text-zinc-400 transition-colors hover:border-red-800 hover:text-red-400 disabled:opacity-50"
-            >
-              <Unlink size={12} />
-              Desvincular
-            </button>
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-bold text-positive">✅ Vinculado</p>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              Despesas podem ser registradas via Telegram.
+            </p>
           </div>
-        </>
+          <button
+            type="button"
+            onClick={handleUnlink}
+            disabled={loading}
+            className="inline-flex items-center gap-1.5 rounded-[10px] border border-border px-3 py-1.5 text-xs font-semibold text-muted-foreground transition-colors hover:text-negative disabled:opacity-50"
+          >
+            <Unlink size={12} />
+            Desvincular
+          </button>
+        </div>
       )}
     </div>
   )

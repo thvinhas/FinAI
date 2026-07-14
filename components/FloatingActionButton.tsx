@@ -3,17 +3,22 @@
 import { usePathname } from "next/navigation";
 import { Plus } from "lucide-react";
 
-const HIDE_ON = ["/login", "/transactions/new"];
+function shouldHide(pathname: string) {
+  if (pathname === "/login") return true;
+  if (pathname === "/transactions/new") return true;
+  if (pathname.startsWith("/transactions/") && pathname.endsWith("/edit")) return true;
+  return false;
+}
 
 export default function FloatingActionButton() {
   const pathname = usePathname();
 
-  if (HIDE_ON.includes(pathname)) return null;
+  if (shouldHide(pathname)) return null;
 
   return (
     <a
       href="/transactions/new"
-      className="fixed bottom-6 right-6 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-indigo-600 text-white shadow-lg shadow-indigo-900/40 transition-all hover:scale-110 hover:bg-indigo-500 active:scale-95 sm:bottom-8 sm:right-8"
+      className="app-fab fixed right-7 bottom-7 z-50 flex size-14 items-center justify-center rounded-full bg-accent text-background shadow-card transition-transform hover:scale-110 active:scale-95"
     >
       <Plus size={26} />
     </a>

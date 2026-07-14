@@ -2,7 +2,8 @@
 
 import { deleteTransaction } from "@/actions/transactions";
 import { useRouter } from "next/navigation";
-import { Pencil, Trash2, ArrowRight } from "lucide-react";
+import { ArrowRight } from "lucide-react";
+import { cn } from "@/lib/utils";
 import type { Transaction } from "@/types/database";
 
 export default function MobileTransactionCards({
@@ -13,96 +14,89 @@ export default function MobileTransactionCards({
   const router = useRouter();
 
   return (
-    <div className="space-y-3 sm:hidden">
+    <div className="flex flex-col gap-3 sm:hidden">
       {transactions.map((t) => (
         <div
           key={t.id}
-          className="rounded-xl border border-zinc-800 bg-zinc-900/50 px-4 py-3"
+          className="rounded-[14px] border border-border bg-surface p-4"
         >
-          <div className="mb-2 flex items-center justify-between">
-            <span className="text-xs text-zinc-500">
-              {new Date(t.date).toLocaleDateString("pt-BR")}
-            </span>
+          <div className="flex items-start justify-between gap-2.5">
+            <div>
+              <div className="text-sm font-bold">
+                {t.type === "transferencia" ? "Transferência" : t.description}
+              </div>
+              <div className="mt-0.5 text-xs text-muted-foreground">
+                {new Date(t.date).toLocaleDateString("pt-BR")}
+                {t.accounts ? ` · ${t.accounts.name}` : ""}
+              </div>
+            </div>
             <span
-              className={`text-sm font-semibold ${
+              className={cn(
+                "whitespace-nowrap text-[15px] font-bold tabular-nums",
                 t.type === "receita"
-                  ? "text-emerald-400"
+                  ? "text-positive"
                   : t.type === "transferencia"
-                    ? "text-indigo-400"
-                    : "text-red-400"
-              }`}
+                    ? "text-transfer"
+                    : "text-negative"
+              )}
             >
               {t.type === "receita" ? "+" : t.type === "transferencia" ? "⇄" : "-"}
               € {Number(t.amount).toFixed(2)}
             </span>
           </div>
 
-          <p className="truncate text-sm font-medium text-white">
-            {t.type === "transferencia" ? "Transferência" : t.description}
-          </p>
-
-          <div className="mt-1.5 flex flex-wrap items-center gap-2">
-            {t.accounts && (
+          {t.type === "transferencia" && t.destination_account && (
+            <div className="mt-1.5 flex items-center gap-1.5 text-xs text-muted-foreground">
+              {t.accounts && (
+                <span
+                  className="rounded-full px-2 py-0.5"
+                  style={{ backgroundColor: t.accounts.color + "26", color: t.accounts.color }}
+                >
+                  {t.accounts.name}
+                </span>
+              )}
+              <ArrowRight size={12} />
               <span
-                className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs"
+                className="rounded-full px-2 py-0.5"
                 style={{
-                  backgroundColor: t.accounts.color + "20",
-                  color: t.accounts.color,
+                  backgroundColor: t.destination_account.color + "26",
+                  color: t.destination_account.color,
                 }}
               >
-                {t.accounts.name}
+                {t.destination_account.name}
               </span>
-            )}
-            {t.type === "transferencia" && t.destination_account && (
-              <>
-                <ArrowRight size={12} className="text-zinc-500" />
-                <span
-                  className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs"
-                  style={{
-                    backgroundColor: t.destination_account.color + "20",
-                    color: t.destination_account.color,
-                  }}
-                >
-                  {t.destination_account.name}
-                </span>
-              </>
-            )}
-            {t.categories && (
+            </div>
+          )}
+
+          <div className="mt-3 flex items-center justify-between border-t border-border pt-2.5">
+            {t.categories ? (
               <span
-                className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs"
-                style={{
-                  backgroundColor: t.categories.color + "20",
-                  color: t.categories.color,
-                }}
+                className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium"
+                style={{ backgroundColor: t.categories.color + "26", color: t.categories.color }}
               >
                 {t.categories.name}
               </span>
+            ) : (
+              <span />
             )}
-          </div>
-
-          <div className="mt-2 flex justify-end gap-3 border-t border-zinc-800 pt-2">
-            <a
-              href={`/transactions/${t.id}/edit`}
-              className="text-zinc-500 transition-colors hover:text-indigo-400"
-            >
-              <Pencil size={15} />
-            </a>
-            <form
-              onSubmit={(e) => {
-                if (!confirm("Excluir esta transação?")) e.preventDefault();
-              }}
-              action={async () => {
-                await deleteTransaction(t.id);
-                router.refresh();
-              }}
-            >
-              <button
-                type="submit"
-                className="text-zinc-500 transition-colors hover:text-red-400"
+            <div className="flex gap-4 text-xs font-semibold">
+              <a href={`/transactions/${t.id}/edit`} className="text-muted-foreground hover:text-foreground">
+                Editar
+              </a>
+              <form
+                onSubmit={(e) => {
+                  if (!confirm("Excluir esta transação?")) e.preventDefault();
+                }}
+                action={async () => {
+                  await deleteTransaction(t.id);
+                  router.refresh();
+                }}
               >
-                <Trash2 size={15} />
-              </button>
-            </form>
+                <button type="submit" className="text-negative hover:opacity-80">
+                  Excluir
+                </button>
+              </form>
+            </div>
           </div>
         </div>
       ))}

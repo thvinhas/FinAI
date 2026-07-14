@@ -2,12 +2,14 @@
 
 import { useState, useRef, useEffect } from "react";
 import { formatCurrency } from "@/lib/format";
+import { cn } from "@/lib/utils";
 
 type Props = {
   name: string;
   defaultValue?: number;
   required?: boolean;
   placeholder?: string;
+  large?: boolean;
 };
 
 export default function CurrencyInput({
@@ -16,6 +18,7 @@ export default function CurrencyInput({
   required,
   placeholder,
   autoFocus,
+  large,
 }: Props & { autoFocus?: boolean }) {
   const [raw, setRaw] = useState(defaultValue);
   const [display, setDisplay] = useState(formatCurrency(defaultValue));
@@ -50,7 +53,12 @@ export default function CurrencyInput({
         onChange={handleChange}
         onFocus={handleFocus}
         autoFocus={autoFocus}
-        className="w-full rounded-lg border border-zinc-700 bg-zinc-900/50 px-4 py-2.5 text-sm text-white outline-none transition-all placeholder:text-zinc-500 hover:border-zinc-600 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
+        className={cn(
+          "w-full rounded-lg border border-border bg-background outline-none transition-all duration-150 placeholder:text-faint focus:border-accent focus:ring-[3px] focus:ring-accent-soft",
+          large
+            ? "px-4 py-3.5 font-heading text-2xl font-bold tabular-nums"
+            : "px-3.5 py-2.5 text-sm tabular-nums"
+        )}
       />
       <input type="hidden" ref={hiddenRef} name={name} />
     </div>

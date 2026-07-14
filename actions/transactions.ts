@@ -266,7 +266,18 @@ export async function getDashboardData(year: number, month: number) {
   const lastDay = new Date(year, month + 1, 0).toISOString().split("T")[0];
   const dayAfterMonth = new Date(year, month + 1, 1).toISOString().split("T")[0];
 
-  const [{ data: monthTransactions }, { data: allTransactions }, { data: accounts }, { data: posMonth }] =
+  const prevMonthDate = new Date(year, month - 1, 1);
+  const prevFirstDay = prevMonthDate.toISOString().split("T")[0];
+  const prevLastDay = new Date(year, month, 0).toISOString().split("T")[0];
+
+  const [
+    { data: monthTransactions },
+    { data: allTransactions },
+    { data: accounts },
+    { data: posMonth },
+    { data: prevMonthTransactions },
+    { count: prevMonthCount },
+  ] =
     await Promise.all([
       supabase
         .from("transactions")
@@ -286,6 +297,15 @@ export async function getDashboardData(year: number, month: number) {
         .from("transactions")
         .select("amount, type")
         .gte("date", dayAfterMonth),
+      supabase
+        .from("transactions")
+        .select("amount, type")
+        .gte("date", prevFirstDay)
+        .lte("date", prevLastDay),
+      supabase
+        .from("transactions")
+        .select("id", { count: "exact", head: true })
+        .lt("date", firstDay),
     ]);
 
   const entries = monthTransactions ?? [];
@@ -337,6 +357,15 @@ export async function getDashboardData(year: number, month: number) {
     year: "numeric",
   });
 
+  const hasPreviousData = (prevMonthCount ?? 0) > 0;
+  const prevReceitas = (prevMonthTransactions ?? [])
+    .filter((t) => t.type === "receita")
+    .reduce((s, t) => s + Number(t.amount), 0);
+  const prevDespesas = (prevMonthTransactions ?? [])
+    .filter((t) => t.type === "despesa")
+    .reduce((s, t) => s + Number(t.amount), 0);
+  const prevSaldoTotal = saldoTotal - economiaValue;
+
   return {
     saldo: economiaValue,
     saldoTotal,
@@ -346,9 +375,49 @@ export async function getDashboardData(year: number, month: number) {
     byCategory: Object.values(byCategory),
     byCategoryReceita: Object.values(byCategoryReceita),
     accounts: accounts ?? [],
+    previousMonth: hasPreviousData
+      ? { receitas: prevReceitas, despesas: prevDespesas, saldoTotal: prevSaldoTotal }
+      : null,
     monthlyData: { receita: receitas, despesa: despesas, saldo: economiaValue, label: monthLabel },
     economia: { value: economiaValue, pct: economiaPct },
   };
+}
+
+const MONTHLY_HISTORY_WINDOW = 24;
+
+export async function getMonthlyHistory(year: number, month: number) {
+  const supabase = await createClient();
+  const windowStart = new Date(year, month - MONTHLY_HISTORY_WINDOW + 1, 1);
+  const rangeStart = windowStart.toISOString().split("T")[0];
+  const rangeEnd = new Date(year, month + 1, 0).toISOString().split("T")[0];
+
+  const { data } = await supabase
+    .from("transactions")
+    .select("amount, type, date")
+    .in("type", ["receita", "despesa"])
+    .gte("date", rangeStart)
+    .lte("date", rangeEnd);
+
+  const byMonth = new Map<string, { receita: number; despesa: number }>();
+  for (let i = 0; i < MONTHLY_HISTORY_WINDOW; i++) {
+    const d = new Date(windowStart.getFullYear(), windowStart.getMonth() + i, 1);
+    byMonth.set(`${d.getFullYear()}-${d.getMonth()}`, { receita: 0, despesa: 0 });
+  }
+
+  for (const t of data ?? []) {
+    const d = new Date(t.date);
+    const key = `${d.getFullYear()}-${d.getMonth()}`;
+    const bucket = byMonth.get(key);
+    if (!bucket) continue;
+    if (t.type === "receita") bucket.receita += Number(t.amount);
+    else bucket.despesa += Number(t.amount);
+  }
+
+  return Array.from(byMonth.entries()).map(([key, totals]) => {
+    const [y, m] = key.split("-").map(Number);
+    const label = new Date(y, m).toLocaleDateString("pt-BR", { month: "short" });
+    return { label: label.replace(".", ""), receita: totals.receita, despesa: totals.despesa };
+  });
 }
 
 export async function suggestCategory(
