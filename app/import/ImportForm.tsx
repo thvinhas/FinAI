@@ -16,7 +16,7 @@ import { detectFormat, parseCSV, parseOFX, detectCSVHeaders, autoDetectMapping, 
 import KeywordManager from "./KeywordManager"
 import IgnoreKeywordManager from "./IgnoreKeywordManager"
 import ImportPreview from "./ImportPreview"
-import { importTransactions, parsePDFWithLLM, classifyBatch } from "@/actions/import"
+import { importTransactions, parsePDFWithLLM, classifyBatch, checkDuplicates } from "@/actions/import"
 import { addIgnoreKeyword } from "@/actions/import-ignore-keywords"
 import { getTransferMappings, saveTransferMapping } from "@/actions/import-transfer-mappings"
 import type { ParsedTransaction, TransferMapping } from "@/types/import"
@@ -85,6 +85,28 @@ export default function ImportForm({
   }, [transactions, accountId, lastImportDates])
 
   const hiddenCount = transactions.length - visibleTransactions.length
+
+  const [autoDuplicateKeys, setAutoDuplicateKeys] = useState<Set<string>>(new Set())
+
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      if (step !== "preview" || !accountId || visibleTransactions.length === 0) {
+        setAutoDuplicateKeys(new Set())
+        return
+      }
+      checkDuplicates(accountId, visibleTransactions).then((result) => {
+        setAutoDuplicateKeys(new Set(result?.duplicateKeys ?? []))
+      })
+    }, 400)
+    return () => clearTimeout(timeout)
+  }, [step, accountId, visibleTransactions])
+
+  const duplicateKeys = useMemo(() => {
+    const keys = new Set(autoDuplicateKeys)
+    for (const d of pendingDuplicates ?? []) keys.add(`${d.date}|${d.description}`)
+    for (const d of pendingTransferDuplicates ?? []) keys.add(`${d.date}|${d.description}`)
+    return keys
+  }, [autoDuplicateKeys, pendingDuplicates, pendingTransferDuplicates])
 
   const handleFile = useCallback(async (file: File) => {
     setError("")
@@ -601,6 +623,19 @@ export default function ImportForm({
         </div>
       )}
 
+      {!pendingDuplicates && !pendingTransferDuplicates && autoDuplicateKeys.size > 0 && (
+        <div className="rounded-xl border border-red-700 bg-red-950/40 p-4 text-sm">
+          <p className="font-medium text-red-400">
+            {autoDuplicateKeys.size} transação(ões) marcada(s) como possível duplicata
+          </p>
+          <p className="mt-1 text-red-300/70">
+            Já existe uma transação com a mesma data e descrição (ou transferência com
+            mesmo valor/data/contas). Veja a tag &quot;Duplicada&quot; nas linhas destacadas abaixo.
+            Ao clicar em Importar, você poderá optar por pular ou importar mesmo assim.
+          </p>
+        </div>
+      )}
+
       {pendingDuplicates && (
         <div className="rounded-xl border border-amber-800 bg-amber-900/30 p-4 text-sm">
           <p className="mb-3 font-medium text-amber-300">
@@ -608,7 +643,8 @@ export default function ImportForm({
           </p>
           <p className="mb-4 text-amber-200/70">
             Essas transações já existem na conta selecionada com a mesma data e
-            descrição. O que deseja fazer?
+            descrição — estão destacadas com a tag &quot;Duplicada&quot; na lista abaixo.
+            O que deseja fazer?
           </p>
           <div className="flex gap-3">
             <button
@@ -635,7 +671,8 @@ export default function ImportForm({
             {pendingTransferDuplicates.length} transferência(s) duplicada(s) encontrada(s)
           </p>
           <p className="mb-4 text-yellow-200/70">
-            Já existe(m) transferência(s) com o mesmo valor, data e contas. O que deseja fazer?
+            Já existe(m) transferência(s) com o mesmo valor, data e contas — estão
+            destacadas com a tag &quot;Duplicada&quot; na lista abaixo. O que deseja fazer?
           </p>
           <div className="flex gap-3">
             <button
@@ -663,6 +700,7 @@ export default function ImportForm({
         accountId={accountId}
         onUpdate={updateTransaction}
         onRemove={removeTransaction}
+        duplicateKeys={duplicateKeys}
       />
 
       <div className="sticky bottom-4 flex items-center justify-between rounded-xl border border-zinc-800 bg-zinc-900 p-4">

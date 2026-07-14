@@ -24,6 +24,7 @@ export default function ImportPreview({
   accountId,
   onUpdate,
   onRemove,
+  duplicateKeys,
 }: {
   transactions: ParsedTransaction[]
   categories: Category[]
@@ -31,6 +32,7 @@ export default function ImportPreview({
   accountId: string
   onUpdate: (index: number, updates: Partial<ParsedTransaction>) => void
   onRemove: (index: number) => void
+  duplicateKeys?: Set<string>
 }) {
   const [localCategories, setLocalCategories] = useState(categories)
   const [addCategoryFor, setAddCategoryFor] = useState<number | null>(null)
@@ -137,11 +139,16 @@ export default function ImportPreview({
       </div>
 
       <div className="divide-y divide-zinc-800">
-        {transactions.map((tx, i) => (
+        {transactions.map((tx, i) => {
+          const isDuplicate = duplicateKeys?.has(`${tx.date}|${tx.description}`) ?? false
+          return (
           <div
             key={i}
+            title={isDuplicate ? "Já existe uma transação com a mesma data e descrição" : undefined}
             className={`grid gap-2 p-3 text-sm sm:grid-cols-[1fr_2fr_1fr_100px_1fr_40px] sm:items-center sm:gap-0 sm:px-4 sm:py-2.5 ${
-              i % 2 === 0 ? "bg-zinc-900/30" : ""
+              isDuplicate
+                ? "border-l-4 border-red-500 bg-red-950/40"
+                : i % 2 === 0 ? "bg-zinc-900/30" : ""
             }`}
           >
             {/* Date */}
@@ -158,14 +165,21 @@ export default function ImportPreview({
             {/* Description */}
             <div className="flex items-center gap-2 sm:block">
               <span className="text-xs text-zinc-500 sm:hidden">Descrição </span>
-              <input
-                type="text"
-                value={tx.description}
-                onChange={(e) =>
-                  onUpdate(i, { description: e.target.value })
-                }
-                className="w-full rounded bg-transparent px-1 py-1 text-white outline-none focus:bg-zinc-800"
-              />
+              <div className="flex w-full items-center gap-1.5">
+                <input
+                  type="text"
+                  value={tx.description}
+                  onChange={(e) =>
+                    onUpdate(i, { description: e.target.value })
+                  }
+                  className="w-full rounded bg-transparent px-1 py-1 text-white outline-none focus:bg-zinc-800"
+                />
+                {isDuplicate && (
+                  <span className="shrink-0 whitespace-nowrap rounded-full bg-red-600 px-2 py-0.5 text-[10px] font-bold text-white shadow-[0_0_0_1px_rgba(239,68,68,0.5)]">
+                    Duplicada
+                  </span>
+                )}
+              </div>
             </div>
 
             {/* Amount */}
@@ -306,7 +320,8 @@ export default function ImportPreview({
               </button>
             </div>
           </div>
-        ))}
+          )
+        })}
       </div>
     </div>
   )
