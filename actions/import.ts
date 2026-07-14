@@ -234,6 +234,68 @@ export async function importTransactions(
   }
 }
 
+export async function checkDuplicates(
+  accountId: string,
+  transactions: ParsedTransaction[]
+) {
+  if (!accountId || transactions.length === 0) return { duplicateKeys: [] }
+
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { duplicateKeys: [] }
+
+  const regular = transactions.filter((t) => t.type !== "transferencia")
+  const transfers = transactions.filter(
+    (t) => t.type === "transferencia" && (t.destination_account_id || t.origin_account_id)
+  )
+
+  const duplicateKeys = new Set<string>()
+
+  const allDescs = [...regular, ...transfers].map((t) => t.description)
+  if (allDescs.length > 0) {
+    const { data: existing } = await supabase
+      .from("transactions")
+      .select("description, date")
+      .eq("account_id", accountId)
+      .in("description", allDescs)
+
+    const existingSet = new Set(
+      (existing ?? []).map((t) => `${t.description}|${t.date}`)
+    )
+
+    for (const t of [...regular, ...transfers]) {
+      if (existingSet.has(`${t.description}|${t.date}`)) {
+        duplicateKeys.add(`${t.date}|${t.description}`)
+      }
+    }
+  }
+
+  for (const t of transfers) {
+    const otherId = t.destination_account_id || t.origin_account_id
+    if (!otherId) continue
+
+    const { data: existingTxn } = await supabase
+      .from("transactions")
+      .select("id")
+      .eq("type", "transferencia")
+      .eq("amount", t.amount)
+      .eq("date", t.date)
+      .or(
+        `and(account_id.eq.${accountId},destination_account_id.eq.${otherId}),` +
+        `and(account_id.eq.${otherId},destination_account_id.eq.${accountId}),` +
+        `and(account_id.eq.${accountId},origin_account_id.eq.${otherId}),` +
+        `and(account_id.eq.${otherId},origin_account_id.eq.${accountId})`
+      )
+      .maybeSingle()
+
+    if (existingTxn) {
+      duplicateKeys.add(`${t.date}|${t.description}`)
+    }
+  }
+
+  return { duplicateKeys: Array.from(duplicateKeys) }
+}
+
 export async function parsePDFWithLLM(
   text: string,
   categories: { id: string; name: string }[] = [],

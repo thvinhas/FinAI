@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   Command,
@@ -10,6 +10,7 @@ import {
   CommandInput,
   CommandItem,
   CommandList,
+  CommandSeparator,
 } from "@/components/ui/command";
 import {
   Popover,
@@ -33,6 +34,8 @@ export default function SearchSelect({
   required,
   searchPlaceholder,
   defaultValue,
+  onAddLabel,
+  onAdd,
 }: {
   options: SelectOption[];
   value?: string;
@@ -43,6 +46,8 @@ export default function SearchSelect({
   required?: boolean;
   searchPlaceholder?: string;
   defaultValue?: string;
+  onAddLabel?: string;
+  onAdd?: () => void;
 }) {
   const [open, setOpen] = React.useState(false);
   const [selected, setSelected] = React.useState(value ?? defaultValue ?? "");
@@ -121,6 +126,20 @@ export default function SearchSelect({
                   </CommandItem>
                 ))}
               </CommandGroup>
+              {onAdd && (
+                <>
+                  <CommandSeparator />
+                  <CommandItem
+                    onSelect={() => {
+                      setOpen(false);
+                      onAdd();
+                    }}
+                  >
+                    <Plus size={14} className="mr-1" />
+                    <span>{onAddLabel ?? "Adicionar"}</span>
+                  </CommandItem>
+                </>
+              )}
             </CommandList>
           </Command>
         </PopoverContent>

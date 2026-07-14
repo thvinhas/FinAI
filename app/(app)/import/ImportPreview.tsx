@@ -1,11 +1,22 @@
 "use client"
 
-import { ArrowRight, ArrowLeft } from "lucide-react"
+import { useState, useEffect } from "react"
+import { ArrowRight, ArrowLeft, Plus, X } from "lucide-react"
 import SearchSelect from "@/components/SearchSelect"
+import { createCategory } from "@/actions/categories"
 import type { ParsedTransaction } from "@/types/import"
 import type { Category, Account } from "@/types/database"
 import { formatCurrency } from "@/lib/format"
 import { cn } from "@/lib/utils"
+
+const CATEGORY_COLORS = [
+  "#6366f1", "#10b981", "#f59e0b", "#ef4444",
+  "#3b82f6", "#ec4899", "#8b5cf6", "#14b8a6",
+  "#f97316", "#06b6d4", "#22c55e", "#a855f7",
+  "#e11d48", "#0ea5e9", "#d946ef", "#84cc16",
+  "#f43f5e", "#64748b", "#fb923c", "#2dd4bf",
+  "#eab308", "#475569", "#a78bfa", "#34d399",
+]
 
 export default function ImportPreview({
   transactions,
@@ -14,6 +25,7 @@ export default function ImportPreview({
   accountId,
   onUpdate,
   onRemove,
+  duplicateKeys,
 }: {
   transactions: ParsedTransaction[]
   categories: Category[]
@@ -21,7 +33,49 @@ export default function ImportPreview({
   accountId: string
   onUpdate: (index: number, updates: Partial<ParsedTransaction>) => void
   onRemove: (index: number) => void
+  duplicateKeys?: Set<string>
 }) {
+  const [localCategories, setLocalCategories] = useState(categories)
+  const [addCategoryFor, setAddCategoryFor] = useState<number | null>(null)
+  const [newCategoryName, setNewCategoryName] = useState("")
+
+  useEffect(() => {
+    setLocalCategories(categories)
+  }, [categories])
+
+  async function handleAddCategory(e: React.FormEvent, rowIndex: number, catType: string) {
+    e.preventDefault()
+    if (!newCategoryName.trim()) return
+
+    const usedColors = new Set(
+      localCategories.filter((c) => c.type === catType).map((c) => c.color)
+    )
+    const suggestedColor = CATEGORY_COLORS.find((c) => !usedColors.has(c)) ?? CATEGORY_COLORS[0]
+
+    const formData = new FormData()
+    formData.set("name", newCategoryName.trim())
+    formData.set("type", catType)
+    formData.set("color", suggestedColor)
+
+    const result = await createCategory(formData)
+    if (result?.error) return
+
+    const newCat: Category = {
+      id: result.id,
+      user_id: "",
+      name: newCategoryName.trim(),
+      type: catType as "receita" | "despesa",
+      color: suggestedColor,
+      icon: "tag",
+      created_at: new Date().toISOString(),
+      archived_at: null,
+    }
+
+    setLocalCategories((prev) => [...prev, newCat])
+    onUpdate(rowIndex, { category_id: result.id })
+    setAddCategoryFor(null)
+    setNewCategoryName("")
+  }
   if (transactions.length === 0) {
     return (
       <p className="py-8 text-center text-sm text-faint">
@@ -89,10 +143,16 @@ export default function ImportPreview({
       </div>
 
       <div className="divide-y divide-border">
-        {transactions.map((tx, i) => (
+        {transactions.map((tx, i) => {
+          const isDuplicate = duplicateKeys?.has(`${tx.date}|${tx.description}`) ?? false
+          return (
           <div
             key={i}
-            className="grid gap-2 p-3 text-sm sm:grid-cols-[1fr_2fr_1fr_100px_1fr_90px] sm:items-center sm:gap-0 sm:px-4 sm:py-2"
+            title={isDuplicate ? "Já existe uma transação com a mesma data e descrição" : undefined}
+            className={cn(
+              "grid gap-2 p-3 text-sm sm:grid-cols-[1fr_2fr_1fr_100px_1fr_90px] sm:items-center sm:gap-0 sm:px-4 sm:py-2",
+              isDuplicate && "border-l-4 border-negative bg-negative-soft"
+            )}
           >
             {/* Date */}
             <div className="flex items-center gap-2 sm:block">
@@ -108,14 +168,21 @@ export default function ImportPreview({
             {/* Description */}
             <div className="flex items-center gap-2 sm:block">
               <span className="text-xs text-faint sm:hidden">Descrição </span>
-              <input
-                type="text"
-                value={tx.description}
-                onChange={(e) =>
-                  onUpdate(i, { description: e.target.value })
-                }
-                className={miniInputClass}
-              />
+              <div className="flex w-full items-center gap-1.5">
+                <input
+                  type="text"
+                  value={tx.description}
+                  onChange={(e) =>
+                    onUpdate(i, { description: e.target.value })
+                  }
+                  className={miniInputClass}
+                />
+                {isDuplicate && (
+                  <span className="shrink-0 whitespace-nowrap rounded-full bg-negative px-2 py-0.5 text-[10px] font-bold text-background">
+                    Duplicada
+                  </span>
+                )}
+              </div>
             </div>
 
             {/* Amount */}
@@ -185,24 +252,62 @@ export default function ImportPreview({
               ) : (
                 <>
                   <span className="text-xs text-faint sm:hidden">Categoria </span>
-                  <SearchSelect
-                    value={tx.category_id ?? ""}
-                    onChange={(val: string) =>
-                      onUpdate(i, { category_id: val || null })
-                    }
-                    placeholder="Sem categoria"
-                    searchPlaceholder="Buscar categoria..."
-                    options={[
-                      { value: "", label: "Sem categoria" },
-                      ...categories
-                        .filter((c) => c.type === tx.type)
-                        .map((c) => ({
-                          value: c.id,
-                          label: c.name,
-                          color: c.color,
-                        })),
-                    ]}
-                  />
+                  <div className="flex items-center gap-1">
+                    <SearchSelect
+                      value={tx.category_id ?? ""}
+                      onChange={(val: string) =>
+                        onUpdate(i, { category_id: val || null })
+                      }
+                      placeholder="Sem categoria"
+                      searchPlaceholder="Buscar categoria..."
+                      onAddLabel="+ Adicionar"
+                      onAdd={() => {
+                        setAddCategoryFor(i)
+                        setNewCategoryName("")
+                      }}
+                      options={[
+                        { value: "", label: "Sem categoria" },
+                        ...localCategories
+                          .filter((c) => c.type === tx.type)
+                          .map((c) => ({
+                            value: c.id,
+                            label: c.name,
+                            color: c.color,
+                          })),
+                      ]}
+                    />
+                  </div>
+                  {addCategoryFor === i && (
+                    <form
+                      onSubmit={(e) => handleAddCategory(e, i, tx.type)}
+                      className="mt-1 flex items-center gap-1"
+                    >
+                      <input
+                        type="text"
+                        value={newCategoryName}
+                        onChange={(e) => setNewCategoryName(e.target.value)}
+                        placeholder="Nome"
+                        autoFocus
+                        className="flex-1 rounded border border-border bg-surface2 px-2 py-1 text-xs outline-none placeholder:text-faint focus:border-accent"
+                      />
+                      <button
+                        type="submit"
+                        className="rounded bg-accent px-2 py-1 text-xs text-background hover:opacity-90"
+                      >
+                        <Plus size={12} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAddCategoryFor(null)
+                          setNewCategoryName("")
+                        }}
+                        className="rounded border border-border px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
+                      >
+                        <X size={12} />
+                      </button>
+                    </form>
+                  )}
                 </>
               )}
             </div>
@@ -217,7 +322,8 @@ export default function ImportPreview({
               </button>
             </div>
           </div>
-        ))}
+          )
+        })}
       </div>
     </div>
   )

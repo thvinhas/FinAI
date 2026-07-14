@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef, useCallback, useEffect } from "react"
+import { useState, useRef, useCallback, useEffect, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import {
   Upload,
@@ -16,7 +16,7 @@ import { detectFormat, parseCSV, parseOFX, detectCSVHeaders, autoDetectMapping, 
 import KeywordManager from "./KeywordManager"
 import IgnoreKeywordManager from "./IgnoreKeywordManager"
 import ImportPreview from "./ImportPreview"
-import { importTransactions, parsePDFWithLLM, classifyBatch } from "@/actions/import"
+import { importTransactions, parsePDFWithLLM, classifyBatch, checkDuplicates } from "@/actions/import"
 import { addIgnoreKeyword } from "@/actions/import-ignore-keywords"
 import { getTransferMappings, saveTransferMapping } from "@/actions/import-transfer-mappings"
 import type { ParsedTransaction, TransferMapping } from "@/types/import"
@@ -32,12 +32,14 @@ export default function ImportForm({
   keywordMap,
   initialIgnoreKeywords,
   initialTransferMappings = [],
+  lastImportDates = {},
 }: {
   accounts: Account[]
   categories: Category[]
   keywordMap: Record<string, string>
   initialIgnoreKeywords?: string[]
   initialTransferMappings?: TransferMapping[]
+  lastImportDates?: Record<string, string | null>
 }) {
   const router = useRouter()
   const inputRef = useRef<HTMLInputElement>(null)
@@ -73,6 +75,38 @@ export default function ImportForm({
   useEffect(() => {
     getTransferMappings().then(setTransferMappings)
   }, [])
+
+  const visibleTransactions = useMemo(() => {
+    if (!accountId) return transactions
+    const lastDate = lastImportDates[accountId]
+    if (!lastDate) return transactions
+    const datePart = lastDate.split("T")[0]
+    return transactions.filter((t) => t.date >= datePart)
+  }, [transactions, accountId, lastImportDates])
+
+  const hiddenCount = transactions.length - visibleTransactions.length
+
+  const [autoDuplicateKeys, setAutoDuplicateKeys] = useState<Set<string>>(new Set())
+
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      if (step !== "preview" || !accountId || visibleTransactions.length === 0) {
+        setAutoDuplicateKeys(new Set())
+        return
+      }
+      checkDuplicates(accountId, visibleTransactions).then((result) => {
+        setAutoDuplicateKeys(new Set(result?.duplicateKeys ?? []))
+      })
+    }, 400)
+    return () => clearTimeout(timeout)
+  }, [step, accountId, visibleTransactions])
+
+  const duplicateKeys = useMemo(() => {
+    const keys = new Set(autoDuplicateKeys)
+    for (const d of pendingDuplicates ?? []) keys.add(`${d.date}|${d.description}`)
+    for (const d of pendingTransferDuplicates ?? []) keys.add(`${d.date}|${d.description}`)
+    return keys
+  }, [autoDuplicateKeys, pendingDuplicates, pendingTransferDuplicates])
 
   const handleFile = useCallback(async (file: File) => {
     setError("")
@@ -300,18 +334,24 @@ export default function ImportForm({
     setProcessingLLM(false)
   }
 
-  function updateTransaction(index: number, updates: Partial<ParsedTransaction>) {
+  function updateTransaction(visibleIndex: number, updates: Partial<ParsedTransaction>) {
+    const visibleTx = visibleTransactions[visibleIndex]
+    if (!visibleTx) return
     setTransactions((prev) => {
-      const updated = prev.map((t, i) => (i === index ? { ...t, ...updates } : t))
-      const tx = updated[index]
+      const rawIndex = prev.findIndex(
+        (t) => t.date === visibleTx.date && t.description === visibleTx.description && t.amount === visibleTx.amount
+      )
+      if (rawIndex === -1) return prev
+      const updated = prev.map((t, i) => (i === rawIndex ? { ...t, ...updates } : t))
+      const tx = updated[rawIndex]
       if (
         tx.type === "transferencia" &&
         (tx.destination_account_id || tx.origin_account_id)
       ) {
-        const accountId = tx.destination_account_id || tx.origin_account_id
-        if (accountId) {
+        const targetAccountId = tx.destination_account_id || tx.origin_account_id
+        if (targetAccountId) {
           const transferType = tx.destination_account_id ? "destination" as const : "origin" as const
-          saveTransferMapping(tx.description, transferType, accountId).then(() => {
+          saveTransferMapping(tx.description, transferType, targetAccountId).then(() => {
             getTransferMappings().then(setTransferMappings)
           })
         }
@@ -320,12 +360,19 @@ export default function ImportForm({
     })
   }
 
-  function removeTransaction(index: number) {
-    setTransactions((prev) => prev.filter((_, i) => i !== index))
+  function removeTransaction(visibleIndex: number) {
+    const visibleTx = visibleTransactions[visibleIndex]
+    if (!visibleTx) return
+    setTransactions((prev) =>
+      prev.filter(
+        (t) =>
+          !(t.date === visibleTx.date && t.description === visibleTx.description && t.amount === visibleTx.amount)
+      )
+    )
   }
 
   function validateTransfers(): string | null {
-    const transfersNoAccount = transactions.filter(
+    const transfersNoAccount = visibleTransactions.filter(
       (t) => t.type === "transferencia" && !t.destination_account_id && !t.origin_account_id
     )
     if (transfersNoAccount.length > 0) {
@@ -336,12 +383,12 @@ export default function ImportForm({
   }
 
   async function handleImport() {
-    if (!accountId || transactions.length === 0) return
+    if (!accountId || visibleTransactions.length === 0) return
     const transferErr = validateTransfers()
     if (transferErr) { setError(transferErr); return }
     setImporting(true)
     setError("")
-    const result = await importTransactions(accountId, transactions)
+    const result = await importTransactions(accountId, visibleTransactions)
     if (result?.transferDuplicates?.length && !pendingTransferDuplicates) {
       setPendingTransferDuplicates(result.transferDuplicates)
       setError(`${result.transferDuplicates.length} transferência(s) duplicada(s) encontrada(s) entre as contas. Deseja importá-la(s) mesmo assim?`)
@@ -379,7 +426,7 @@ export default function ImportForm({
       return
     }
     router.push(
-      `/transactions?success=${result?.imported ?? transactions.length}+transações+importadas`
+      `/transactions?success=${result?.imported ?? visibleTransactions.length}+transações+importadas`
     )
   }
 
@@ -389,7 +436,7 @@ export default function ImportForm({
     setImporting(true)
     const transferErr = validateTransfers()
     if (transferErr) { setError(transferErr); setImporting(false); return }
-    const result = await importTransactions(accountId, transactions, true)
+    const result = await importTransactions(accountId, visibleTransactions, true)
     if (result?.noDestiny?.length) {
       setTransactions((prev) =>
         prev.filter((t) =>
@@ -480,9 +527,14 @@ export default function ImportForm({
           <div>
             <p className="text-sm font-bold">{fileName || "Texto colado"}</p>
             <p className="text-xs text-muted-foreground">
-              {transactions.length} transação
-              {transactions.length !== 1 ? "ões" : ""} encontrada
-              {transactions.length !== 1 ? "s" : ""}
+              {visibleTransactions.length} transação
+              {visibleTransactions.length !== 1 ? "ões" : ""} encontrada
+              {visibleTransactions.length !== 1 ? "s" : ""}
+              {hiddenCount > 0 && (
+                <span className="ml-1 text-faint">
+                  ({hiddenCount} anteriores ao último import ignoradas)
+                </span>
+              )}
             </p>
           </div>
         </div>
@@ -567,6 +619,19 @@ export default function ImportForm({
         </div>
       )}
 
+      {!pendingDuplicates && !pendingTransferDuplicates && autoDuplicateKeys.size > 0 && (
+        <div className="rounded-xl border border-red-700 bg-red-950/40 p-4 text-sm">
+          <p className="font-medium text-red-400">
+            {autoDuplicateKeys.size} transação(ões) marcada(s) como possível duplicata
+          </p>
+          <p className="mt-1 text-red-300/70">
+            Já existe uma transação com a mesma data e descrição (ou transferência com
+            mesmo valor/data/contas). Veja a tag &quot;Duplicada&quot; nas linhas destacadas abaixo.
+            Ao clicar em Importar, você poderá optar por pular ou importar mesmo assim.
+          </p>
+        </div>
+      )}
+
       {pendingDuplicates && (
         <div className="rounded-2xl border border-transfer bg-transfer-soft p-4 text-sm">
           <p className="mb-2.5 font-bold text-transfer">
@@ -574,7 +639,8 @@ export default function ImportForm({
           </p>
           <p className="mb-3.5 text-foreground/80">
             Essas transações já existem na conta selecionada com a mesma data e
-            descrição. O que deseja fazer?
+            descrição — estão destacadas com a tag &quot;Duplicada&quot; na lista abaixo.
+            O que deseja fazer?
           </p>
           <div className="flex gap-2.5">
             <button
@@ -601,7 +667,8 @@ export default function ImportForm({
             {pendingTransferDuplicates.length} transferência(s) duplicada(s) encontrada(s)
           </p>
           <p className="mb-3.5 text-foreground/80">
-            Já existe(m) transferência(s) com o mesmo valor, data e contas. O que deseja fazer?
+            Já existe(m) transferência(s) com o mesmo valor, data e contas — estão
+            destacadas com a tag &quot;Duplicada&quot; na lista abaixo. O que deseja fazer?
           </p>
           <div className="flex gap-2.5">
             <button
@@ -623,19 +690,38 @@ export default function ImportForm({
       )}
 
       <ImportPreview
-        transactions={transactions}
+        transactions={visibleTransactions}
         categories={categories}
         accounts={accounts}
         accountId={accountId}
         onUpdate={updateTransaction}
         onRemove={removeTransaction}
+        duplicateKeys={duplicateKeys}
       />
 
-      <div className="sticky bottom-4 z-25 flex justify-center rounded-2xl border border-border bg-surface px-6 py-3.5 shadow-card">
+      <div className="sticky bottom-4 z-25 flex items-center justify-between gap-4 rounded-2xl border border-border bg-surface px-6 py-3.5 shadow-card">
+        <div>
+          <p className="text-sm text-muted-foreground">
+            {visibleTransactions.length} transação
+            {visibleTransactions.length !== 1 ? "ões" : ""}
+            {hiddenCount > 0 && (
+              <span className="ml-2 text-xs text-faint">
+                ({hiddenCount} ocultadas)
+              </span>
+            )}
+            {accountId &&
+              ` → ${accounts.find((a) => a.id === accountId)?.name ?? ""}`}
+          </p>
+          {!accountId && (
+            <p className="text-xs text-faint">
+              Selecione uma conta para importar
+            </p>
+          )}
+        </div>
         <button
           onClick={handleImport}
           disabled={
-            !accountId || transactions.length === 0 || importing
+            !accountId || visibleTransactions.length === 0 || importing
           }
           className="flex items-center gap-2 rounded-[11px] bg-accent px-7 py-3 text-sm font-bold text-background disabled:cursor-not-allowed disabled:opacity-50"
         >
@@ -646,7 +732,7 @@ export default function ImportForm({
           )}
           {importing
             ? "Importando..."
-            : `Importar ${transactions.length} transações`}
+            : `Importar ${visibleTransactions.length} transações`}
         </button>
       </div>
     </div>
