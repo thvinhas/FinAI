@@ -11,5 +11,7 @@ export default async function AppGroupLayout({
     data: { user },
   } = await supabase.auth.getUser();
 
-  return <AppShell userName={user?.email}>{children}</AppShell>;
+  const userName = user?.user_metadata?.name ?? user?.email;
+
+  return <AppShell userName={userName}>{children}</AppShell>;
 }
