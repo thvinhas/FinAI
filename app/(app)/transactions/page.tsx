@@ -126,12 +126,14 @@ async function TransactionsContent({
       .from("accounts")
       .select("id, name, color")
       .eq("user_id", userId)
-      .is("archived_at", null),
+      .is("archived_at", null)
+      .order("name"),
     supabase
       .from("categories")
       .select("id, name, color, type")
       .eq("user_id", userId)
-      .is("archived_at", null),
+      .is("archived_at", null)
+      .order("name"),
   ]);
 
   return (

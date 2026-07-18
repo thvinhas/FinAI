@@ -292,7 +292,8 @@ export async function getDashboardData(year: number, month: number) {
         .limit(10),
       supabase
         .from("accounts")
-        .select("id, name, balance, color, type"),
+        .select("id, name, balance, color, type")
+        .order("name"),
       supabase
         .from("transactions")
         .select("amount, type")

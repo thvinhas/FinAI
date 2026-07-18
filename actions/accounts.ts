@@ -11,7 +11,7 @@ export async function getAccounts(): Promise<Account[]> {
     .from("accounts")
     .select("*")
     .is("archived_at", null)
-    .order("balance", { ascending: false });
+    .order("name");
   return data ?? [];
 }
 
