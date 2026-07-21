@@ -10,6 +10,7 @@ import {
   Loader2,
   X,
 } from "lucide-react"
+import { cn } from "@/lib/utils"
 import { applyKeywordMap } from "./categorizer"
 import Papa from "papaparse"
 import { detectFormat, parseCSV, parseOFX, detectCSVHeaders, autoDetectMapping, filterGarbage, extractGarbageKeywords, parseDate, parseCurrency, cleanDescription } from "./parser"
@@ -43,10 +44,13 @@ export default function ImportForm({
 }) {
   const router = useRouter()
   const inputRef = useRef<HTMLInputElement>(null)
+  const rawTextSectionRef = useRef<HTMLDivElement>(null)
 
   const [step, setStep] = useState<Step>("upload")
   const [fileName, setFileName] = useState("")
   const [rawText, setRawText] = useState("")
+  const [highlightRawText, setHighlightRawText] = useState(false)
+  const [importSessionCutoffs] = useState(lastImportDates)
 
   const [transactions, setTransactions] = useState<ParsedTransaction[]>([])
   const [parsing, setParsing] = useState(false)
@@ -78,11 +82,11 @@ export default function ImportForm({
 
   const visibleTransactions = useMemo(() => {
     if (!accountId) return transactions
-    const lastDate = lastImportDates[accountId]
+    const lastDate = importSessionCutoffs[accountId]
     if (!lastDate) return transactions
     const datePart = lastDate.split("T")[0]
     return transactions.filter((t) => t.date >= datePart)
-  }, [transactions, accountId, lastImportDates])
+  }, [transactions, accountId, importSessionCutoffs])
 
   const hiddenCount = transactions.length - visibleTransactions.length
 
@@ -131,6 +135,11 @@ export default function ImportForm({
       }
       setRawText(text.substring(0, 20000))
       setParsing(false)
+      requestAnimationFrame(() => {
+        rawTextSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "center" })
+        setHighlightRawText(true)
+        setTimeout(() => setHighlightRawText(false), 1500)
+      })
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erro ao processar arquivo")
       setParsing(false)
@@ -489,7 +498,13 @@ export default function ImportForm({
         <KeywordManager onKeywordsChange={setTransferKeywords} />
         <IgnoreKeywordManager onKeywordsChange={setIgnoreKeywords} />
 
-        <div className="flex flex-col gap-3 rounded-2xl border border-border bg-surface p-5">
+        <div
+          ref={rawTextSectionRef}
+          className={cn(
+            "flex flex-col gap-3 rounded-2xl border border-border bg-surface p-5 transition-shadow duration-700",
+            highlightRawText && "border-accent ring-4 ring-accent-soft"
+          )}
+        >
           <h2 className="text-sm font-bold">Texto do Extrato (editável)</h2>
           <textarea
             value={rawText}
