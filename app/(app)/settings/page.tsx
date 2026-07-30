@@ -31,6 +31,7 @@ export default async function SettingsPage() {
     description: r.description,
     transfer_type: r.transfer_type as "origin" | "destination",
     account_id: r.account_id,
+    source_account_id: r.source_account_id,
     created_at: r.created_at,
   })) as TransferMapping[]
 

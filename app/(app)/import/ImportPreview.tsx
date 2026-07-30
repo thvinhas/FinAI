@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { ArrowRight, ArrowLeft, Plus, X } from "lucide-react"
+import { ArrowRight, Plus, X } from "lucide-react"
 import SearchSelect from "@/components/SearchSelect"
 import { createCategory } from "@/actions/categories"
 import type { ParsedTransaction } from "@/types/import"
@@ -109,6 +109,11 @@ export default function ImportPreview({
   }
 
   const otherAccounts = accounts.filter((a) => a.id !== accountId)
+  const currentAccountName = accounts.find((a) => a.id === accountId)?.name ?? "conta atual"
+
+  function getAccountName(id: string) {
+    return accounts.find((a) => a.id === id)?.name ?? "?"
+  }
 
   const destOptions = [
     { value: "", label: "Selecione a conta de destino" },
@@ -219,9 +224,15 @@ export default function ImportPreview({
                 <>
                   {tx.origin_account_id !== null && tx.origin_account_id !== undefined ? (
                     <>
-                      <span className="text-xs text-faint sm:hidden">
-                        <ArrowLeft size={12} className="inline" /> Origem{" "}
-                      </span>
+                      <div className="mb-1 flex items-center gap-1.5 text-xs text-faint">
+                        <span className="max-w-24 truncate">
+                          {tx.origin_account_id ? getAccountName(tx.origin_account_id) : "?"}
+                        </span>
+                        <ArrowRight size={12} className="shrink-0 text-faint" />
+                        <span className="max-w-24 truncate font-medium text-foreground">
+                          {currentAccountName}
+                        </span>
+                      </div>
                       <SearchSelect
                         value={tx.origin_account_id ?? ""}
                         onChange={(val: string) =>
@@ -234,9 +245,15 @@ export default function ImportPreview({
                     </>
                   ) : (
                     <>
-                      <span className="text-xs text-faint sm:hidden">
-                        <ArrowRight size={12} className="inline" /> Destino{" "}
-                      </span>
+                      <div className="mb-1 flex items-center gap-1.5 text-xs text-faint">
+                        <span className="max-w-24 truncate font-medium text-foreground">
+                          {currentAccountName}
+                        </span>
+                        <ArrowRight size={12} className="shrink-0 text-faint" />
+                        <span className="max-w-24 truncate">
+                          {tx.destination_account_id ? getAccountName(tx.destination_account_id) : "?"}
+                        </span>
+                      </div>
                       <SearchSelect
                         value={tx.destination_account_id ?? ""}
                         onChange={(val: string) =>

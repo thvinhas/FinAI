@@ -25,9 +25,15 @@ export async function importTransactions(
   if (!account) return { error: "Conta não encontrada" }
 
   const transfers = transactions.filter((t) => t.type === "transferencia")
-  const regular = transactions.filter((t) => t.type !== "transferencia")
+  const allRegular = transactions.filter((t) => t.type !== "transferencia")
 
-  const noCategory = regular.filter((t) => !t.category_id)
+  // Transações sem categoria ficam de fora deste lote — se fossem inseridas
+  // com category_id null e reportadas como "noCategory", o cliente as
+  // mantinha na tela como se ainda não tivessem sido importadas, e um novo
+  // clique em Importar as reenviava, gerando duplicata (elas já estariam no
+  // banco da primeira vez).
+  const noCategory = allRegular.filter((t) => !t.category_id)
+  const regular = allRegular.filter((t) => t.category_id)
 
   const validatesTransfers: ParsedTransaction[] = []
   const invalidTransfers: ParsedTransaction[] = []
@@ -160,11 +166,17 @@ export async function importTransactions(
 
   if (error) return { error: error.message, noCategory, duplicates: allDuplicates, noDestiny: invalidTransfers, transferDuplicates }
 
-  await supabase.from("import_logs").insert({
-    user_id: user.id,
-    account_id: accountId,
-    transaction_count: allToImport.length,
-  })
+  // Só grava o log (que avança o corte "esconder anteriores ao último
+  // import") quando não sobra pendência sem categoria — senão, ao recarregar
+  // a tela, as transações ainda não importadas (mas com data anterior a
+  // hoje) ficariam escondidas pelo próprio corte, sem chance de importar.
+  if (noCategory.length === 0) {
+    await supabase.from("import_logs").insert({
+      user_id: user.id,
+      account_id: accountId,
+      transaction_count: allToImport.length,
+    })
+  }
 
   if (regularDelta !== 0) {
     await supabase
