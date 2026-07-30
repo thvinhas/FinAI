@@ -14,6 +14,7 @@ export type TransferMapping = {
   description: string
   transfer_type: "origin" | "destination"
   account_id: string
+  source_account_id: string | null
   created_at: string
 }
 

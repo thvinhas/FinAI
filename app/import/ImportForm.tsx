@@ -76,13 +76,39 @@ export default function ImportForm({
     getTransferMappings().then(setTransferMappings)
   }, [])
 
-  const visibleTransactions = useMemo(() => {
+  // Mapeamentos de transferência são específicos por conta de origem — só
+  // dá pra saber qual mapeamento aplicar depois que a conta é escolhida
+  // (accountId), por isso essa reclassificação roda em cima de `transactions`
+  // em vez de acontecer no parse.
+  const categorizedTransactions = useMemo(() => {
     if (!accountId) return transactions
+    return transactions.map((t) => {
+      if (t.type === "transferencia" && (t.destination_account_id || t.origin_account_id)) {
+        return t
+      }
+      const mapping = transferMappings.find(
+        (m) =>
+          (m.source_account_id === null || m.source_account_id === accountId) &&
+          t.description.toLowerCase().includes(m.description.toLowerCase())
+      )
+      if (!mapping) return t
+      return {
+        ...t,
+        type: "transferencia" as const,
+        category_id: null,
+        destination_account_id: mapping.transfer_type === "destination" ? mapping.account_id : null,
+        origin_account_id: mapping.transfer_type === "origin" ? mapping.account_id : null,
+      }
+    })
+  }, [transactions, accountId, transferMappings])
+
+  const visibleTransactions = useMemo(() => {
+    if (!accountId) return categorizedTransactions
     const lastDate = lastImportDates[accountId]
-    if (!lastDate) return transactions
+    if (!lastDate) return categorizedTransactions
     const datePart = lastDate.split("T")[0]
-    return transactions.filter((t) => t.date >= datePart)
-  }, [transactions, accountId, lastImportDates])
+    return categorizedTransactions.filter((t) => t.date >= datePart)
+  }, [categorizedTransactions, accountId, lastImportDates])
 
   const hiddenCount = transactions.length - visibleTransactions.length
 
@@ -138,27 +164,12 @@ export default function ImportForm({
   }, [])
 
   function applyCategories(txns: ParsedTransaction[]) {
-    const withCats = txns.map((t) => {
-      // Apply transfer mappings
-      const mapping = transferMappings.find(
-        (m) => t.description.toLowerCase().includes(m.description.toLowerCase())
-      )
-      if (mapping) {
-        return {
-          ...t,
-          type: "transferencia" as const,
-          category_id: null,
-          destination_account_id: mapping.transfer_type === "destination" ? mapping.account_id : null,
-          origin_account_id: mapping.transfer_type === "origin" ? mapping.account_id : null,
-        }
-      }
-      return {
-        ...t,
-        destination_account_id: t.type !== "transferencia" ? null : t.destination_account_id ?? null,
-        origin_account_id: t.type !== "transferencia" ? null : t.origin_account_id ?? null,
-        category_id: t.type === "transferencia" ? null : (applyKeywordMap(t.description, keywordMap) ?? t.category_id),
-      }
-    })
+    const withCats = txns.map((t) => ({
+      ...t,
+      destination_account_id: t.type !== "transferencia" ? null : t.destination_account_id ?? null,
+      origin_account_id: t.type !== "transferencia" ? null : t.origin_account_id ?? null,
+      category_id: t.type === "transferencia" ? null : (applyKeywordMap(t.description, keywordMap) ?? t.category_id),
+    }))
     setTransactions(withCats)
     setProcessingLLM(false)
     setStep("preview")
@@ -289,26 +300,12 @@ export default function ImportForm({
     }
 
     // Apply keyword mapping
-    const withCats = txns.map((t) => {
-      const mapping = transferMappings.find(
-        (m) => t.description.toLowerCase().includes(m.description.toLowerCase())
-      )
-      if (mapping) {
-        return {
-          ...t,
-          type: "transferencia" as const,
-          category_id: null,
-          destination_account_id: mapping.transfer_type === "destination" ? mapping.account_id : null,
-          origin_account_id: mapping.transfer_type === "origin" ? mapping.account_id : null,
-        }
-      }
-      return {
-        ...t,
-        destination_account_id: null,
-        origin_account_id: null,
-        category_id: applyKeywordMap(t.description, keywordMap) ?? t.category_id,
-      }
-    })
+    const withCats = txns.map((t) => ({
+      ...t,
+      destination_account_id: null,
+      origin_account_id: null,
+      category_id: applyKeywordMap(t.description, keywordMap) ?? t.category_id,
+    }))
 
     // Classify uncategorized with LLM
     const catList = categories.map((c) => ({ id: c.id, name: c.name }))
@@ -351,7 +348,7 @@ export default function ImportForm({
         const targetAccountId = tx.destination_account_id || tx.origin_account_id
         if (targetAccountId) {
           const transferType = tx.destination_account_id ? "destination" as const : "origin" as const
-          saveTransferMapping(tx.description, transferType, targetAccountId).then(() => {
+          saveTransferMapping(tx.description, transferType, targetAccountId, accountId || null).then(() => {
             getTransferMappings().then(setTransferMappings)
           })
         }
