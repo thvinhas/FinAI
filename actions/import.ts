@@ -5,6 +5,22 @@ import { revalidatePath } from "next/cache"
 import type { ParsedTransaction } from "@/types/import"
 import { extractFromPDFText, classifyBatchWithLLM } from "@/app/(app)/import/llm"
 
+// Ao importar as duas pontas de uma mesma transferência a partir de extratos
+// de bancos/carteiras diferentes, a data de saída num lado raramente casa
+// com a data de entrada no outro (pode levar dias). Uma janela generosa
+// evita duplicar o valor nas duas contas — é só um aviso que dá pra
+// sobrepor, então preferimos alertar demais a deixar passar duplicata.
+const TRANSFER_DUP_DATE_WINDOW_DAYS = 30
+
+function dateWindow(date: string) {
+  const d = new Date(`${date}T00:00:00Z`)
+  const from = new Date(d)
+  from.setUTCDate(from.getUTCDate() - TRANSFER_DUP_DATE_WINDOW_DAYS)
+  const to = new Date(d)
+  to.setUTCDate(to.getUTCDate() + TRANSFER_DUP_DATE_WINDOW_DAYS)
+  return { from: from.toISOString().slice(0, 10), to: to.toISOString().slice(0, 10) }
+}
+
 export async function importTransactions(
   accountId: string,
   transactions: ParsedTransaction[],
@@ -62,17 +78,17 @@ export async function importTransactions(
       const otherId = t.destination_account_id || t.origin_account_id
       if (!otherId) continue
 
+      const { from, to } = dateWindow(t.date)
       const { data: existingTxn } = await supabase
         .from("transactions")
         .select("id")
         .eq("type", "transferencia")
         .eq("amount", t.amount)
-        .eq("date", t.date)
+        .gte("date", from)
+        .lte("date", to)
         .or(
           `and(account_id.eq.${accountId},destination_account_id.eq.${otherId}),` +
-          `and(account_id.eq.${otherId},destination_account_id.eq.${accountId}),` +
-          `and(account_id.eq.${accountId},origin_account_id.eq.${otherId}),` +
-          `and(account_id.eq.${otherId},origin_account_id.eq.${accountId})`
+          `and(account_id.eq.${otherId},destination_account_id.eq.${accountId})`
         )
         .maybeSingle()
 
@@ -154,7 +170,12 @@ export async function importTransactions(
     ...toImportTransfers.map((t) => ({
       user_id: user.id,
       account_id: t.origin_account_id || accountId,
-      destination_account_id: t.destination_account_id || null,
+      // Transferência mapeada como "origem" (t.origin_account_id setado):
+      // account_id é a conta de origem, e a conta que está sendo importada
+      // agora (accountId) é o destino real do dinheiro — precisa ficar
+      // registrado, senão o dedup de transferência (que só olha account_id +
+      // destination_account_id) nunca acha esse lado de novo.
+      destination_account_id: t.origin_account_id ? accountId : (t.destination_account_id || null),
       amount: t.amount,
       type: "transferencia",
       description: t.description,
@@ -286,17 +307,17 @@ export async function checkDuplicates(
     const otherId = t.destination_account_id || t.origin_account_id
     if (!otherId) continue
 
+    const { from, to } = dateWindow(t.date)
     const { data: existingTxn } = await supabase
       .from("transactions")
       .select("id")
       .eq("type", "transferencia")
       .eq("amount", t.amount)
-      .eq("date", t.date)
+      .gte("date", from)
+      .lte("date", to)
       .or(
         `and(account_id.eq.${accountId},destination_account_id.eq.${otherId}),` +
-        `and(account_id.eq.${otherId},destination_account_id.eq.${accountId}),` +
-        `and(account_id.eq.${accountId},origin_account_id.eq.${otherId}),` +
-        `and(account_id.eq.${otherId},origin_account_id.eq.${accountId})`
+        `and(account_id.eq.${otherId},destination_account_id.eq.${accountId})`
       )
       .maybeSingle()
 
